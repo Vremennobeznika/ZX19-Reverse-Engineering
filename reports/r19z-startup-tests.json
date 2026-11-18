@@ -11,6 +11,26 @@
       "non_stack_writes": 15
     },
     {
+      "case": "aliased_entry",
+      "passed": true,
+      "rom_calls": [
+        "0xd8a4",
+        "0x112c",
+        "0xd8bc"
+      ],
+      "non_stack_writes": 15
+    },
+    {
+      "case": "aliased_table",
+      "passed": true,
+      "rom_calls": [
+        "0xd8a4",
+        "0x112c",
+        "0xd8bc"
+      ],
+      "non_stack_writes": 15
+    },
+    {
       "case": "hci",
       "passed": true,
       "rom_calls": [
@@ -86,7 +106,7 @@
       "non_stack_writes": 0
     }
   ],
-  "elf_sha256": "bc3dc40627f6904e444d67781097be2ccca6d747dbaec4b6bf8b703f4b876187",
+  "elf_sha256": "539fdf909e1ef991857714e7fa1969734113e1997ec9287d37c6cf111b2cd23e",
   "entry": "0x82c400",
   "static_ram_end": "0x208508",
   "source": "src/r19z_startup.c",

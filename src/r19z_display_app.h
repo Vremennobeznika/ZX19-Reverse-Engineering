@@ -14,7 +14,7 @@ typedef struct {
     uint8_t day, month;
 } r19z_clock_sample;
 
-/* Cold start with zero-initialized app storage and a prepared display bus. */
+/* Start with zero-initialized app storage and initialized platform services. */
 int r19z_display_start(r19z_display_app *, const r19z_clock_sample *);
 int r19z_display_update(r19z_display_app *, const r19z_clock_sample *);
 #endif

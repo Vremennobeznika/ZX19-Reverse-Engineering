@@ -43,6 +43,7 @@ def check(case):
     uc.mem_map(0,0x20000)
     uc.mem_map(0x200000,0x20000)
     uc.mem_map(0x800000,0x100000)
+    uc.mem_map(0x4800000,0x100000)
     for s in sections:
         if s[2]&2 and s[1]!=8 and s[5]:
             data=elf[s[4]:s[4]+s[5]]
@@ -51,19 +52,22 @@ def check(case):
     uc.mem_write(0x208500,b'\xa5'*0x8a30)
     uc.mem_write(0x2002dc,bytes([0 if case=='stack_disabled' else 1]))
     bank=0x802000; stack=0x810000; stack_size=0x10000
-    uc.mem_write(bank+0x1e0,struct.pack('<II',stack,stack_size))
+    stored_stack = stack | (0x4000000 if case=='aliased_table' else 0)
+    uc.mem_write(bank+0x1e0,struct.pack('<II',stored_stack,stack_size))
     hdr=bytearray(1024)
     struct.pack_into('<BBHHHI',hdr,0,9,0,0x901,0x279a,0,0xfc00)
     hdr[12:28]=bytes.fromhex('1d6a69f12f38ea1182a767370a3ca32e')
-    struct.pack_into('<I',hdr,28,stack+1025)
+    stored_entry = (stack+1025) | (0x4000000 if case=='aliased_entry' else 0)
+    struct.pack_into('<I',hdr,28,stored_entry)
     if case=='wrong_uuid': hdr[12]^=1
     if case=='not_ready': hdr[2]|=0x80
     if case=='bad_entry': struct.pack_into('<I',hdr,28,stack+stack_size)
     if case=='bad_id': struct.pack_into('<H',hdr,4,0x2793)
-    uc.mem_write(stack,bytes(hdr))
+    uc.mem_write(stack | 0x4000000,bytes(hdr))
     for address in (0xd8a4,0x112c,0xd8bc): uc.mem_write(address,b'\x70\x47')
     uc.mem_protect(0,0x20000,U.UC_PROT_READ|U.UC_PROT_EXEC)
     uc.mem_protect(0x800000,0x100000,U.UC_PROT_READ|U.UC_PROT_EXEC)
+    uc.mem_protect(0x4800000,0x100000,U.UC_PROT_READ)
     writes=[]; rom_calls=[]
     def rom(machine,address,size,user):
         if address not in (0xd8a4,0x112c,0xd8bc): return
@@ -88,11 +92,11 @@ def check(case):
     uc.emu_start(symbols['r19z_system_init']|1,0x800100,timeout=1_000_000,count=100000)
     assert uc.reg_read(A.UC_ARM_REG_PC)==0x800100
     assert uc.reg_read(A.UC_ARM_REG_SP)==0x203400
-    success=case=='valid'
+    success=case in ('valid','aliased_entry','aliased_table')
     assert uc.reg_read(A.UC_ARM_REG_R0)==int(success)
     if success:
         expected={0x200380:0x208500,0x200384:0x13f00,0x200388:0x7d00,
-                  0x200cc0:symbols['r19z_pre_main'],0x200cc4:stack+1025,
+                  0x200cc0:symbols['r19z_pre_main'],0x200cc4:stored_entry,
                   0x200cc8:symbols['r19z_app_main'],0x200fb4:symbols['r19z_watchdog_callback'],
                   symbols['boot_fixture_data']:0x1234abcd,symbols['boot_fixture_bss']:0}
         for address,value in expected.items():
@@ -100,7 +104,7 @@ def check(case):
     else: assert not writes, 'Rejected fixture changed application/platform memory'
     return {'case':case,'passed':True,'rom_calls':rom_calls,'non_stack_writes':len(writes)}
 
-cases=[check(c) for c in ('valid','hci','stack_disabled','no_bank','bad_bank_header',
+cases=[check(c) for c in ('valid','aliased_entry','aliased_table','hci','stack_disabled','no_bank','bad_bank_header',
                          'wrong_uuid','not_ready','bad_entry','bad_id')]
 report={'cases':cases,'elf_sha256':hashlib.sha256(elf).hexdigest(),
         'entry':'0x82c400','static_ram_end':hex(symbols['__r19z_bss_end']),

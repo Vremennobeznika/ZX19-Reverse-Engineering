@@ -18,8 +18,7 @@ static const uint8_t expected_rom[16] = {
 };
 
 static int header_matches(uint32_t address, uint16_t id) {
-    /* Only the documented mapped flash window; arithmetic cannot wrap. */
-    if (address < 0x800000u || address > 0xffffe0u || (address & 3u)) return 0;
+    /* Caller has checked the physical span. Read through the stock bank alias. */
     if (REG8(address) != 9 || (REG32(address) & (1u << 23))) return 0;
     if (*(volatile uint16_t *)(uintptr_t)(address + 4) != id) return 0;
     for (unsigned i=0; i<16; ++i)
@@ -40,13 +39,15 @@ int r19z_system_init(void) {
     uint32_t bank = active_bank();
     if (bank < 0x800000u || bank > 0xfff000u || (bank & 0xfffu)) return 0;
     if (!check_header(bank, 0x2790)) return 0;
-    uint32_t stack_address = REG32(bank + 0x1e0);
+    const uint32_t bank_alias = 0x04000000u;
+    uint32_t stack_address = REG32(bank + 0x1e0) & ~bank_alias;
     uint32_t stack_size = REG32(bank + 0x1e4);
     if (stack_size < 1024 || stack_size > 0x800000u ||
         stack_address < 0x800000u || stack_address > 0x1000000u-stack_size ||
-        !header_matches(stack_address, 0x279a)) return 0;
-    uint32_t stack_entry = REG32(stack_address+28) & ~1u;
-    if (stack_entry < stack_address+1024 || stack_entry >= stack_address+stack_size) return 0;
+        (stack_address & 3u) || !header_matches(stack_address | bank_alias, 0x279a)) return 0;
+    uint32_t stack_entry = REG32((stack_address | bank_alias)+28);
+    uint32_t entry_address = stack_entry & ~(bank_alias | 1u);
+    if (entry_address < stack_address+1024 || entry_address >= stack_address+stack_size) return 0;
 
     for (uint8_t *p=__r19z_data_start; p<__r19z_data_end; ++p)
         *p=__r19z_data_load[p-__r19z_data_start];
