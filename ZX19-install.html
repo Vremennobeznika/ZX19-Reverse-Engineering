@@ -1,0 +1,104 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Первая установка ZX19 Libre</title>
+<style>*{box-sizing:border-box}body{max-width:39rem;margin:3rem auto;padding:1rem;background:#17151b;color:#f6eff5;font:17px/1.55 system-ui}button,input,progress,output{display:block;margin:1rem 0;max-width:100%}button{padding:.75rem 1rem;border:0;border-radius:.5rem;background:#f2cbe5;color:#201820;font:inherit}button:disabled{opacity:.55}progress{width:100%}</style>
+<h1>Первая установка ZX19 Libre</h1>
+<p>Для ZX19 с заводской версией R19Z_1.00.18_241125. Положите часы на зарядку, отключите их от телефона и откройте страницу в Chrome или Edge на компьютере с Bluetooth.</p>
+<label>Образ ZX19 Libre 0.2 <input id="imageFile" type="file" accept=".bin"></label>
+<p>Запись заменит приложение часов. Восстановление при сбое до запуска Bluetooth на этом экземпляре не проверено.</p>
+<button id="install">Выбрать часы и начать установку</button>
+<button id="check">Проверить запуск Libre</button>
+<progress id="bar" max="1" value="0" aria-label="Передано"></progress><output id="note" aria-live="polite"></output>
+<script>
+const byId=id=>document.getElementById(id);
+const install=byId('install'),check=byId('check'),bar=byId('bar'),note=byId('note');
+const ota='de5bf728-d711-4e47-af26-65e3012a5dc7', tx=ota.replace('f728','f72a'),rx=ota.replace('f728','f729');
+const libre='6e40fff0-b5a3-f393-e0a9-e50e24dcca9e';
+const digest='6628bbf7751f613aab518dc1f39ee8c25fe1bee9263da35bba9e80f9ed3cfc98';
+function crc(bytes){
+  let c=65535;
+  for(const b of bytes){c^=b;for(let bit=0;bit<8;bit++)c=(c>>>1)^((c&1)?0xa001:0)}
+  return c;
+}
+function frame(cmd,p=new Uint8Array()){
+  const data=new Uint8Array(6+p.length),v=new DataView(data.buffer);
+  data[0]=188;data[1]=cmd;v.setUint16(2,p.length,true);v.setUint16(4,crc(p),true);data.set(p,6);return data;
+}
+async function upload(device,bytes){
+  const server=await device.gatt.connect(),info=await server.getPrimaryService('device_information');
+  async function read(id){const c=await info.getCharacteristic(id);return new TextDecoder().decode(await c.readValue()).replace(/\0+$/,'')}
+  if(await read('hardware_revision_string')!=='R19Z_V1.0'||await read('firmware_revision_string')!=='R19Z_1.00.18_241125')
+    throw Error('Модель или заводская версия отличается');
+  const svc=await server.getPrimaryService(ota),writer=await svc.getCharacteristic(tx),notify=await svc.getCharacteristic(rx);
+  let pending=null;
+  function receive(e){
+    if(!pending)return;
+    const v=e.target.value,b=new Uint8Array(v.buffer,v.byteOffset,v.byteLength),p=pending;
+    p.buffer.push(...b);
+    const a=Uint8Array.from(p.buffer),length=p.cmd===7?6:1;
+    if(a.length<6)return;
+    if(a[0]!==188||a[1]!==p.cmd||a[2]!==length||a[3]!==0||a.length>6+length){p.reject(Error('Неожиданный ответ часов'));return}
+    if(a.length<6+length)return;
+    const body=a.subarray(6);
+    if(crc(body)!==(a[4]|a[5]<<8)||body[0]!==0)p.reject(Error('Часы отклонили команду '+p.cmd+' либо ответ повреждён'));
+    else p.resolve(body);
+  }
+  const disconnected=()=>pending?.reject(Error('Соединение прервано'));
+  async function exchange(cmd,payload){
+    const data=frame(cmd,payload);
+    let timer;
+    const ack=new Promise((resolve,reject)=>{
+      pending={cmd,buffer:[],resolve,reject};
+      timer=setTimeout(()=>reject(Error('Истекло время ожидания ответа часов')),15000);
+    });
+    const send=async()=>{for(let i=0;i<data.length;i+=20){
+      if(!pending)throw Error('Передача остановлена');
+      await writer.writeValueWithResponse(data.subarray(i,i+20));
+    }};
+    try{return (await Promise.all([ack,send()]))[0]}finally{clearTimeout(timer);pending=null}
+  }
+  notify.addEventListener('characteristicvaluechanged',receive);
+  device.addEventListener('gattserverdisconnected',disconnected);
+  try{
+    await notify.startNotifications();
+    const state=await exchange(7);
+    if(state.subarray(1).some(b=>b!==0))throw Error('На часах уже начато другое обновление');
+    await exchange(1);
+    const meta=new Uint8Array(9),v=new DataView(meta.buffer);meta[0]=1;
+    v.setUint32(1,bytes.length,true);v.setUint16(5,crc(bytes),true);v.setUint16(7,bytes.reduce((a,b)=>a+b,0)&65535,true);
+    await exchange(2,meta);
+    for(let i=0;i<bytes.length;i+=1024){
+      const part=bytes.subarray(i,i+1024),p=new Uint8Array(part.length+2);
+      new DataView(p.buffer).setUint16(0,1+i/1024,true);p.set(part,2);
+      await exchange(3,p);bar.value=(i+part.length)/bytes.length;note.textContent='Передано '+Math.round(bar.value*100)+' %';
+    }
+    await exchange(4);
+    await writer.writeValueWithResponse(frame(5));
+    note.textContent='Образ передан. После перезапуска нажмите «Проверить запуск Libre».';
+  }finally{
+    notify.removeEventListener('characteristicvaluechanged',receive);
+    device.removeEventListener('gattserverdisconnected',disconnected);
+  }
+}
+async function run(verify){
+  let device;
+  install.disabled=check.disabled=true;
+  try{
+    if(!navigator.bluetooth)throw Error('В браузере недоступен Bluetooth');
+    if(!verify && byId('imageFile').files[0]?.size!==19396)throw Error('Выберите образ ZX19 Libre 0.2 размером 19 396 байт');
+    device=await navigator.bluetooth.requestDevice(verify?{filters:[{name:'ZX19 Libre'}],optionalServices:[libre]}:
+      {filters:[{namePrefix:'O_ZX19'},{namePrefix:'ZX19'}],optionalServices:['device_information',ota]});
+    if(verify){
+      const server=await device.gatt.connect(),svc=await server.getPrimaryService(libre);
+      await svc.getCharacteristic('6e400019-b5a3-f393-e0a9-e50e24dcca9e');
+      note.textContent='Выбранные часы запустили Libre. Служба повторного обновления доступна.';
+    }else{
+      const bytes=new Uint8Array(await byId('imageFile').files[0].arrayBuffer());
+      const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
+      if(hash!==digest)throw Error('Файл отличается от опубликованной сборки');
+      bar.value=0;note.textContent='Проверка модели и состояния часов…';await upload(device,bytes);
+    }
+  }catch(e){note.textContent='Установка или запуск не подтверждены. '+e.message}
+  finally{if(device?.gatt.connected)device.gatt.disconnect();install.disabled=check.disabled=false}
+}
+install.onclick=()=>run(false);check.onclick=()=>run(true);
+</script></html>
