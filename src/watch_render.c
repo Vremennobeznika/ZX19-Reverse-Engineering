@@ -176,9 +176,9 @@ static void render(const watch_state *s, const render_canvas *c, unsigned dirty,
             rect(c,(c->width-29*scale)/2,82,29*scale,7*scale,0);
             rect(c,(c->width-60)/2,139,60,14,0);
         }
-        text(c,(c->width-30*scale+scale)/2,82,value,scale,0);
+        text(c,(c->width-30*scale+scale)/2,82,local_seconds == UINT32_MAX ? "--:--" : value,scale,0);
         two(value,day); value[2]='.'; two(value+3,month); value[5]=0;
-        text(c,(c->width-60)/2,139,value,2,0);
+        text(c,(c->width-60)/2,139,day && month ? value : "--.--",2,0);
         if (dirty==WATCH_FULL) card(c,c->height-74,"МЕНЮ",1);
     } else if (s->page==WATCH_TIMER || s->page==WATCH_STOPWATCH) {
         int scale=c->width>=160?3:2;

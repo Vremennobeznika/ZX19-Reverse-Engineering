@@ -2,7 +2,9 @@
 #include "watch_render.h"
 
 static int valid_sample(const r19z_clock_sample *t) {
-    return t && t->local_seconds < 86400 && t->month >= 1 && t->month <= 12 &&
+    if (!t) return 0;
+    if (t->local_seconds == UINT32_MAX) return !t->day && !t->month;
+    return t->local_seconds < 86400 && t->month >= 1 && t->month <= 12 &&
            t->day >= 1 && t->day <= 31;
 }
 

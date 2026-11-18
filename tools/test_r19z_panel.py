@@ -1,30 +1,19 @@
 """Execute the board adapter on Cortex-M4 with modeled ROM, bus and clock."""
 import json
-import os
 from pathlib import Path
 import struct
-import subprocess
 import sys
 import ctypes as C
 import hashlib
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from build_r19z_runtime import build_runtime
 import unicorn as U
 from unicorn import arm_const as A
 
 root = Path(__file__).resolve().parents[1]
 build = root / 'build'
 build.mkdir(exist_ok=True)
-image = build / 'r19z-panel-test.elf'
-zig = root / 'tools/python/Lib/site-packages/ziglang/zig.exe'
-subprocess.run([str(zig), 'cc', '-target', 'thumb-freestanding-eabi', '-mcpu=cortex_m4',
-                '-Os', '-g', '-Wall', '-Wextra', '-Werror', '-ffreestanding', '-nostdlib',
-                '-Wl,-u,r19z_display_update',
-                '-Wl,-T,' + str(root / 'tests/emulator.ld'), '-Wl,-e,r19z_display_start',
-                str(root / 'src/r19z_panel.c'), str(root / 'src/watch_lcd.c'),
-                str(root / 'src/r19z_display_app.c'), str(root / 'src/watch_core.c'),
-                str(root / 'src/watch_render.c'),
-                '-o', str(image)], check=True,
-               env=dict(os.environ, ZIG_GLOBAL_CACHE_DIR=str(build / 'zig-cache')))
-elf = image.read_bytes()
+elf = build_runtime().read_bytes()
 entry = struct.unpack_from('<I', elf, 24)[0]
 offset = struct.unpack_from('<I', elf, 32)[0]
 stride, count = struct.unpack_from('<HH', elf, 46)
@@ -44,7 +33,7 @@ expected = [(op['kind'], op['value']) for op in stock['operations']]
 sys.path.insert(0, str(root / 'tests'))
 from test_renderer import Canvas, FILL, State
 
-def frame_operations():
+def frame_operations(seconds=45240, day=17, month=11):
     lib = C.CDLL(str(build / 'watch_core.dll'))
     state = State()
     lib.watch_init(C.byref(state), 500)
@@ -57,7 +46,7 @@ def frame_operations():
         ops.append(('command', 0x2c))
         ops.extend([('data', color >> 8), ('data', color & 255)] * (w*h))
     canvas = Canvas(172, 320, rectangle, None)
-    lib.watch_render(C.byref(state), C.byref(canvas), 2, 45240, 17, 11)
+    lib.watch_render(C.byref(state), C.byref(canvas), 2, C.c_uint(seconds), day, month)
     assert len(ops) > 172*320*2
     return ops
 
@@ -90,10 +79,11 @@ def stock_bus_trace(hz):
     assert cpu.reg_read(A.UC_ARM_REG_PC) == 0x832478
     return trace
 
-def run(stall_at, delay_slot=0x2d801, hz=40000000):
+def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True):
     cpu = U.Uc(U.UC_ARCH_ARM, U.UC_MODE_THUMB | U.UC_MODE_MCLASS)
     cpu.ctl_set_cpu_model(A.UC_CPU_ARM_CORTEX_M4)
-    for base, size in [(0x2d000, 4096), (0x100000, 0x20000), (0x200000, 0x20000)]:
+    for base, size in [(0, 0x40000), (0x100000, 0x20000), (0x200000, 0x20000),
+                       (0x800000,0x100000),(0x4800000,0x100000),(0xe000e000,4096)]:
         cpu.mem_map(base, size)
     for i in range(count):
         section = struct.unpack_from('<10I', elf, offset + stride * i)
@@ -154,7 +144,62 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000):
     for reg, value in [(A.UC_ARM_REG_R0, lcd), (A.UC_ARM_REG_R1, 0x202000),
                        (A.UC_ARM_REG_SP, 0x21fff0), (A.UC_ARM_REG_LR, stop | 1)]:
         cpu.reg_write(reg, value)
-    cpu.emu_start(entry | 1, stop, count=12000000)
+    if boot:
+        # ROM model drives the slots installed by the linked entry point.
+        bank, stack = 0x802000, 0x810000
+        cpu.mem_write(bank+0x1e0,struct.pack('<II',stack,0x10000))
+        cpu.mem_write(stack|0x4000000, struct.pack('<BBHHHI',9,0,0x901,0x279a,0,0xfc00)
+                      + bytes.fromhex('1d6a69f12f38ea1182a767370a3ca32e') + struct.pack('<I',stack+1025))
+        cpu.mem_write(0x2002dc,b'\x01')
+        cpu.mem_write(symbols[b'__r19z_bss_start'], b'\xa5'*(symbols[b'__r19z_bss_end']-symbols[b'__r19z_bss_start']))
+        task = []
+        calls = []
+        def rom(machine, pc, size, user):
+            calls.append(pc)
+            arg = machine.reg_read(A.UC_ARM_REG_R0)
+            if pc == 0xd8a4: result = 0
+            elif pc == 0x112c: result = bank
+            elif pc == 0xd8bc: result = int(arg == bank)
+            elif pc == 0x4d38:
+                assert arg == 0x200000
+                machine.mem_write(0xe000ed08,struct.pack('<I',arg))
+                result = 0
+            elif pc == 0x1330c:
+                assert machine.mem_read(machine.reg_read(A.UC_ARM_REG_R1),5)==b'ZX19\0'
+                task.append(machine.reg_read(A.UC_ARM_REG_R2))
+                result = int(create_ok)
+            elif pc == 0x130a0:
+                machine.reg_write(A.UC_ARM_REG_PC,task[0])
+                return
+            elif pc == 0x13046:
+                machine.reg_write(A.UC_ARM_REG_R1,0)
+                result = 500
+            elif pc == 0x13028:
+                assert arg == 60000
+                machine.emu_stop()
+                return
+            elif pc == stack+1024: result = 0
+            else: raise AssertionError(hex(pc))
+            machine.reg_write(A.UC_ARM_REG_R0,result)
+            machine.reg_write(A.UC_ARM_REG_PC,machine.reg_read(A.UC_ARM_REG_LR))
+        for address in (0xd8a4,0x112c,0xd8bc,0x4d38,0x1330c,0x130a0,0x13046,0x13028,stack+1024):
+            cpu.hook_add(U.UC_HOOK_CODE,rom,begin=address,end=address)
+        def invoke(addr):
+            cpu.reg_write(A.UC_ARM_REG_LR,stop|1)
+            cpu.emu_start(addr|1,stop,count=12000000)
+        assert entry & ~1 == 0x82c400
+        invoke(entry)
+        assert cpu.reg_read(A.UC_ARM_REG_R0)==1
+        slots = struct.unpack('<III',cpu.mem_read(0x200cc0,12))
+        assert slots == (symbols[b'r19z_pre_main'],stack+1025,symbols[b'r19z_app_main'])
+        for addr in slots: invoke(addr)
+        if not create_ok:
+            assert 0x130a0 not in calls and not ops
+            return
+        assert calls[-4:] == [0x1330c,0x130a0,0x13046,0x13028]
+        assert ops == [('delay_candidate_ms', n) for n in (50,5,20,120)] + expected + frame_operations(0xffffffff,0,0)
+        return
+    cpu.emu_start(symbols[b'r19z_display_start'] | 1, stop, count=12000000)
     assert cpu.reg_read(A.UC_ARM_REG_PC) == stop
     if delay_slot != 0x2d801:
         assert cpu.reg_read(A.UC_ARM_REG_R0) == 0
@@ -190,4 +235,6 @@ for invalid in (0, 1, 0xffffffff, 0x2d800):
     run(0, invalid)
 for hz in (8000000,90000000,100000000,48000000):
     run(1,hz=hz)
-print(f'12 cases passed; hardware setup matched stock at 5 clocks; {len(frame)} first-frame transfers')
+run(0,boot=True)
+run(0,boot=True,create_ok=False)
+print(f'14 cases passed, including linked ROM entry to first frame and task creation failure; {len(frame)} timed-face transfers')
