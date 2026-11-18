@@ -1,0 +1,96 @@
+{
+  "cases": [
+    {
+      "case": "valid",
+      "passed": true,
+      "rom_calls": [
+        "0xd8a4",
+        "0x112c",
+        "0xd8bc"
+      ],
+      "non_stack_writes": 15
+    },
+    {
+      "case": "hci",
+      "passed": true,
+      "rom_calls": [
+        "0xd8a4"
+      ],
+      "non_stack_writes": 0
+    },
+    {
+      "case": "stack_disabled",
+      "passed": true,
+      "rom_calls": [
+        "0xd8a4"
+      ],
+      "non_stack_writes": 0
+    },
+    {
+      "case": "no_bank",
+      "passed": true,
+      "rom_calls": [
+        "0xd8a4",
+        "0x112c"
+      ],
+      "non_stack_writes": 0
+    },
+    {
+      "case": "bad_bank_header",
+      "passed": true,
+      "rom_calls": [
+        "0xd8a4",
+        "0x112c",
+        "0xd8bc"
+      ],
+      "non_stack_writes": 0
+    },
+    {
+      "case": "wrong_uuid",
+      "passed": true,
+      "rom_calls": [
+        "0xd8a4",
+        "0x112c",
+        "0xd8bc"
+      ],
+      "non_stack_writes": 0
+    },
+    {
+      "case": "not_ready",
+      "passed": true,
+      "rom_calls": [
+        "0xd8a4",
+        "0x112c",
+        "0xd8bc"
+      ],
+      "non_stack_writes": 0
+    },
+    {
+      "case": "bad_entry",
+      "passed": true,
+      "rom_calls": [
+        "0xd8a4",
+        "0x112c",
+        "0xd8bc"
+      ],
+      "non_stack_writes": 0
+    },
+    {
+      "case": "bad_id",
+      "passed": true,
+      "rom_calls": [
+        "0xd8a4",
+        "0x112c",
+        "0xd8bc"
+      ],
+      "non_stack_writes": 0
+    }
+  ],
+  "elf_sha256": "bc3dc40627f6904e444d67781097be2ccca6d747dbaec4b6bf8b703f4b876187",
+  "entry": "0x82c400",
+  "static_ram_end": "0x208508",
+  "source": "src/r19z_startup.c",
+  "device_access": false,
+  "hardware_boot_verified": false,
+  "limitations": "Synthetic ROM responses and bank/upperstack headers; test-only callbacks. No board/radio/app startup is implemented by these callbacks."
+}

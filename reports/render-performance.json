@@ -1,0 +1,49 @@
+{
+  "before_elf_sha256": "c00cd01e5191aa2a067b2dead48bcce625fcc62cdfce77851249561d8f9affce",
+  "after_elf_sha256": "09b9f2d15c6e75001b640f1c2415b2bee5c472925e444ae89e91c8c071578aa7",
+  "conditions": "Unicorn 2.1.4 Cortex-M4, Zig 0.17.1 -Os, 172x320, 32 strips/frame, same five page states and time",
+  "results": [
+    {
+      "page": 0,
+      "before_instructions": 740295,
+      "after_instructions": 224149,
+      "reduction_percent": 69.72,
+      "pixels_identical": true
+    },
+    {
+      "page": 1,
+      "before_instructions": 1287803,
+      "after_instructions": 255222,
+      "reduction_percent": 80.18,
+      "pixels_identical": true
+    },
+    {
+      "page": 2,
+      "before_instructions": 1354592,
+      "after_instructions": 265987,
+      "reduction_percent": 80.36,
+      "pixels_identical": true
+    },
+    {
+      "page": 3,
+      "before_instructions": 1328181,
+      "after_instructions": 249366,
+      "reduction_percent": 81.22,
+      "pixels_identical": true
+    },
+    {
+      "page": 4,
+      "before_instructions": 935336,
+      "after_instructions": 249225,
+      "reduction_percent": 73.35,
+      "pixels_identical": true
+    }
+  ],
+  "allocated_arm_sections_before": 6205,
+  "allocated_arm_sections_after": 6425,
+  "state_bytes_before_and_after": 796,
+  "observed_stack_before": 284,
+  "observed_stack_after": 280,
+  "hardware_test": false,
+  "limitation": "Instruction counts are not cycle, FPS, CPU utilization or battery measurements."
+}

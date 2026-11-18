@@ -1,0 +1,123 @@
+{
+  "cases": [
+    {
+      "case": "probe",
+      "passed": true,
+      "commands": [
+        167,
+        768
+      ],
+      "status_polls": 6,
+      "fault": 0,
+      "controller_disabled": false
+    },
+    {
+      "case": "sample",
+      "passed": true,
+      "commands": [
+        167,
+        256,
+        256,
+        256,
+        256,
+        256,
+        768
+      ],
+      "status_polls": 16,
+      "fault": 0,
+      "controller_disabled": false
+    },
+    {
+      "case": "nack",
+      "passed": true,
+      "commands": [
+        167
+      ],
+      "status_polls": 3,
+      "fault": 1,
+      "controller_disabled": true
+    },
+    {
+      "case": "stuck_rx",
+      "passed": true,
+      "commands": [
+        167,
+        256
+      ],
+      "status_polls": 82,
+      "fault": 1,
+      "controller_disabled": true
+    },
+    {
+      "case": "missing_stop",
+      "passed": true,
+      "commands": [
+        167,
+        256,
+        256,
+        256,
+        256,
+        256,
+        768
+      ],
+      "status_polls": 15,
+      "fault": 1,
+      "controller_disabled": true
+    },
+    {
+      "case": "busy",
+      "passed": true,
+      "commands": [],
+      "status_polls": 1,
+      "fault": 0,
+      "controller_disabled": false
+    },
+    {
+      "case": "stale_rx",
+      "passed": true,
+      "commands": [],
+      "status_polls": 2,
+      "fault": 1,
+      "controller_disabled": false
+    },
+    {
+      "case": "wrong_target",
+      "passed": true,
+      "commands": [],
+      "status_polls": 0,
+      "fault": 0,
+      "controller_disabled": false
+    },
+    {
+      "case": "bad_size",
+      "passed": true,
+      "commands": [],
+      "status_polls": 0,
+      "fault": 0,
+      "controller_disabled": false
+    },
+    {
+      "case": "fault_latched",
+      "passed": true,
+      "commands": [],
+      "status_polls": 0,
+      "fault": 1,
+      "controller_disabled": false
+    },
+    {
+      "case": "large_budget",
+      "passed": true,
+      "commands": [
+        167,
+        256
+      ],
+      "status_polls": 4098,
+      "fault": 1,
+      "controller_disabled": true
+    }
+  ],
+  "cpu": "Cortex-M4",
+  "hardware_test": false,
+  "device_access": false,
+  "limitation": "Synthetic register behavior; electrical timing, pinmux, clocks and physical controller are not verified."
+}

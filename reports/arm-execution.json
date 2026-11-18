@@ -1,0 +1,46 @@
+{
+  "passed": true,
+  "unicorn_version": "2.1.4",
+  "cpu": "Cortex-M4",
+  "elf_sha256": "09b9f2d15c6e75001b640f1c2415b2bee5c472925e444ae89e91c8c071578aa7",
+  "calls": 170,
+  "state_bytes": 796,
+  "observed_stack_bytes": 280,
+  "pages": [
+    {
+      "page": 0,
+      "rgb565_sha256": "c8e0168caca38a1b9f6adae78a799cee48846e9b240d19cb4f82cbd3e38f2029",
+      "strips_matched": 32,
+      "render_instructions": 224149
+    },
+    {
+      "page": 1,
+      "rgb565_sha256": "6bdae236c4ff8dc5eb618bba9a5d62169b6bb9aa4b5dcc5690299fee1029a607",
+      "strips_matched": 32,
+      "render_instructions": 255222
+    },
+    {
+      "page": 2,
+      "rgb565_sha256": "342ce8ff51de8c02ee36c81f1ba3dfacc7b19b0314df9fe1e1f8bef54013d6bf",
+      "strips_matched": 32,
+      "render_instructions": 265987
+    },
+    {
+      "page": 3,
+      "rgb565_sha256": "c19ef35fa2ae56793d8a6f6112fa44e545a9373e1ca0e8423036cc01af62fe38",
+      "strips_matched": 32,
+      "render_instructions": 249366
+    },
+    {
+      "page": 4,
+      "rgb565_sha256": "88c54e43dbd38cf4d7cae51e7dadb9ed494bd47a256bdb8accf1aba43ad2220b",
+      "strips_matched": 32,
+      "render_instructions": 249225
+    }
+  ],
+  "memory_write_guards": true,
+  "instruction_profiling": true,
+  "hardware_test": false,
+  "flashable_image": false,
+  "limitations": "CPU-only synthetic map: no ROM, interrupts, DMA, BLE, display hardware or energy measurement."
+}

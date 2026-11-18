@@ -1,0 +1,577 @@
+{
+  "function_candidate": "0x83ab7a",
+  "commands": [
+    {
+      "command": "0x11",
+      "data": []
+    },
+    {
+      "command": "0x36",
+      "data": [
+        0
+      ]
+    },
+    {
+      "command": "0x3a",
+      "data": [
+        5
+      ]
+    },
+    {
+      "command": "0xb2",
+      "data": [
+        28,
+        28,
+        0,
+        51,
+        51
+      ]
+    },
+    {
+      "command": "0xb7",
+      "data": [
+        53
+      ]
+    },
+    {
+      "command": "0xbb",
+      "data": [
+        53
+      ]
+    },
+    {
+      "command": "0xc0",
+      "data": [
+        44
+      ]
+    },
+    {
+      "command": "0xc2",
+      "data": [
+        1
+      ]
+    },
+    {
+      "command": "0xc3",
+      "data": [
+        19
+      ]
+    },
+    {
+      "command": "0xc4",
+      "data": [
+        21
+      ]
+    },
+    {
+      "command": "0xd0",
+      "data": [
+        164,
+        161
+      ]
+    },
+    {
+      "command": "0xd6",
+      "data": [
+        161
+      ]
+    },
+    {
+      "command": "0xe0",
+      "data": [
+        240,
+        0,
+        4,
+        4,
+        4,
+        5,
+        41,
+        51,
+        62,
+        56,
+        18,
+        18,
+        40,
+        48
+      ]
+    },
+    {
+      "command": "0xe1",
+      "data": [
+        240,
+        7,
+        10,
+        13,
+        11,
+        7,
+        40,
+        51,
+        62,
+        54,
+        20,
+        20,
+        41,
+        50
+      ]
+    },
+    {
+      "command": "0x2a",
+      "data": [
+        0,
+        34,
+        0,
+        205
+      ]
+    },
+    {
+      "command": "0x2b",
+      "data": [
+        0,
+        0,
+        1,
+        63
+      ]
+    },
+    {
+      "command": "0xc6",
+      "data": [
+        27
+      ]
+    },
+    {
+      "command": "0x35",
+      "data": [
+        0
+      ]
+    },
+    {
+      "command": "0x44",
+      "data": [
+        0,
+        240
+      ]
+    },
+    {
+      "command": "0x21",
+      "data": []
+    },
+    {
+      "command": "0x29",
+      "data": []
+    },
+    {
+      "command": "0x2c",
+      "data": []
+    }
+  ],
+  "windows": {
+    "0x2a": {
+      "start": 34,
+      "end": 205,
+      "span": 172
+    },
+    "0x2b": {
+      "start": 0,
+      "end": 319,
+      "span": 320
+    }
+  },
+  "operations": [
+    {
+      "address": "0x83ab7e",
+      "kind": "command",
+      "value": 17
+    },
+    {
+      "address": "0x83ab84",
+      "kind": "delay_candidate_ms",
+      "value": 120
+    },
+    {
+      "address": "0x83ab8a",
+      "kind": "command",
+      "value": 54
+    },
+    {
+      "address": "0x83ab90",
+      "kind": "data",
+      "value": 0
+    },
+    {
+      "address": "0x83ab96",
+      "kind": "command",
+      "value": 58
+    },
+    {
+      "address": "0x83ab9c",
+      "kind": "data",
+      "value": 5
+    },
+    {
+      "address": "0x83aba2",
+      "kind": "command",
+      "value": 178
+    },
+    {
+      "address": "0x83aba8",
+      "kind": "data",
+      "value": 28
+    },
+    {
+      "address": "0x83abae",
+      "kind": "data",
+      "value": 28
+    },
+    {
+      "address": "0x83abb4",
+      "kind": "data",
+      "value": 0
+    },
+    {
+      "address": "0x83abba",
+      "kind": "data",
+      "value": 51
+    },
+    {
+      "address": "0x83abc0",
+      "kind": "data",
+      "value": 51
+    },
+    {
+      "address": "0x83abc6",
+      "kind": "command",
+      "value": 183
+    },
+    {
+      "address": "0x83abcc",
+      "kind": "data",
+      "value": 53
+    },
+    {
+      "address": "0x83abd2",
+      "kind": "command",
+      "value": 187
+    },
+    {
+      "address": "0x83abd8",
+      "kind": "data",
+      "value": 53
+    },
+    {
+      "address": "0x83abde",
+      "kind": "command",
+      "value": 192
+    },
+    {
+      "address": "0x83abe4",
+      "kind": "data",
+      "value": 44
+    },
+    {
+      "address": "0x83abea",
+      "kind": "command",
+      "value": 194
+    },
+    {
+      "address": "0x83abf0",
+      "kind": "data",
+      "value": 1
+    },
+    {
+      "address": "0x83abf6",
+      "kind": "command",
+      "value": 195
+    },
+    {
+      "address": "0x83abfc",
+      "kind": "data",
+      "value": 19
+    },
+    {
+      "address": "0x83ac02",
+      "kind": "command",
+      "value": 196
+    },
+    {
+      "address": "0x83ac08",
+      "kind": "data",
+      "value": 21
+    },
+    {
+      "address": "0x83ac0e",
+      "kind": "command",
+      "value": 208
+    },
+    {
+      "address": "0x83ac14",
+      "kind": "data",
+      "value": 164
+    },
+    {
+      "address": "0x83ac1a",
+      "kind": "data",
+      "value": 161
+    },
+    {
+      "address": "0x83ac20",
+      "kind": "command",
+      "value": 214
+    },
+    {
+      "address": "0x83ac26",
+      "kind": "data",
+      "value": 161
+    },
+    {
+      "address": "0x83ac2c",
+      "kind": "command",
+      "value": 224
+    },
+    {
+      "address": "0x83ac32",
+      "kind": "data",
+      "value": 240
+    },
+    {
+      "address": "0x83ac38",
+      "kind": "data",
+      "value": 0
+    },
+    {
+      "address": "0x83ac3e",
+      "kind": "data",
+      "value": 4
+    },
+    {
+      "address": "0x83ac44",
+      "kind": "data",
+      "value": 4
+    },
+    {
+      "address": "0x83ac4a",
+      "kind": "data",
+      "value": 4
+    },
+    {
+      "address": "0x83ac50",
+      "kind": "data",
+      "value": 5
+    },
+    {
+      "address": "0x83ac56",
+      "kind": "data",
+      "value": 41
+    },
+    {
+      "address": "0x83ac5c",
+      "kind": "data",
+      "value": 51
+    },
+    {
+      "address": "0x83ac62",
+      "kind": "data",
+      "value": 62
+    },
+    {
+      "address": "0x83ac68",
+      "kind": "data",
+      "value": 56
+    },
+    {
+      "address": "0x83ac6e",
+      "kind": "data",
+      "value": 18
+    },
+    {
+      "address": "0x83ac74",
+      "kind": "data",
+      "value": 18
+    },
+    {
+      "address": "0x83ac7a",
+      "kind": "data",
+      "value": 40
+    },
+    {
+      "address": "0x83ac80",
+      "kind": "data",
+      "value": 48
+    },
+    {
+      "address": "0x83ac86",
+      "kind": "command",
+      "value": 225
+    },
+    {
+      "address": "0x83ac8c",
+      "kind": "data",
+      "value": 240
+    },
+    {
+      "address": "0x83ac92",
+      "kind": "data",
+      "value": 7
+    },
+    {
+      "address": "0x83ac98",
+      "kind": "data",
+      "value": 10
+    },
+    {
+      "address": "0x83ac9e",
+      "kind": "data",
+      "value": 13
+    },
+    {
+      "address": "0x83aca4",
+      "kind": "data",
+      "value": 11
+    },
+    {
+      "address": "0x83acaa",
+      "kind": "data",
+      "value": 7
+    },
+    {
+      "address": "0x83acb0",
+      "kind": "data",
+      "value": 40
+    },
+    {
+      "address": "0x83acb6",
+      "kind": "data",
+      "value": 51
+    },
+    {
+      "address": "0x83acbc",
+      "kind": "data",
+      "value": 62
+    },
+    {
+      "address": "0x83acc2",
+      "kind": "data",
+      "value": 54
+    },
+    {
+      "address": "0x83acc8",
+      "kind": "data",
+      "value": 20
+    },
+    {
+      "address": "0x83acce",
+      "kind": "data",
+      "value": 20
+    },
+    {
+      "address": "0x83acd4",
+      "kind": "data",
+      "value": 41
+    },
+    {
+      "address": "0x83acda",
+      "kind": "data",
+      "value": 50
+    },
+    {
+      "address": "0x83ace0",
+      "kind": "command",
+      "value": 42
+    },
+    {
+      "address": "0x83ace6",
+      "kind": "data",
+      "value": 0
+    },
+    {
+      "address": "0x83acec",
+      "kind": "data",
+      "value": 34
+    },
+    {
+      "address": "0x83acf2",
+      "kind": "data",
+      "value": 0
+    },
+    {
+      "address": "0x83acf8",
+      "kind": "data",
+      "value": 205
+    },
+    {
+      "address": "0x83acfe",
+      "kind": "command",
+      "value": 43
+    },
+    {
+      "address": "0x83ad04",
+      "kind": "data",
+      "value": 0
+    },
+    {
+      "address": "0x83ad0a",
+      "kind": "data",
+      "value": 0
+    },
+    {
+      "address": "0x83ad10",
+      "kind": "data",
+      "value": 1
+    },
+    {
+      "address": "0x83ad16",
+      "kind": "data",
+      "value": 63
+    },
+    {
+      "address": "0x83ad1c",
+      "kind": "command",
+      "value": 198
+    },
+    {
+      "address": "0x83ad22",
+      "kind": "data",
+      "value": 27
+    },
+    {
+      "address": "0x83ad28",
+      "kind": "command",
+      "value": 53
+    },
+    {
+      "address": "0x83ad2e",
+      "kind": "data",
+      "value": 0
+    },
+    {
+      "address": "0x83ad34",
+      "kind": "command",
+      "value": 68
+    },
+    {
+      "address": "0x83ad3a",
+      "kind": "data",
+      "value": 0
+    },
+    {
+      "address": "0x83ad40",
+      "kind": "data",
+      "value": 240
+    },
+    {
+      "address": "0x83ad46",
+      "kind": "command",
+      "value": 33
+    },
+    {
+      "address": "0x83ad4c",
+      "kind": "command",
+      "value": 41
+    },
+    {
+      "address": "0x83ad56",
+      "kind": "command",
+      "value": 44
+    }
+  ],
+  "note": "Static candidate, ST7789-compatible command set. Panel ID and live hardware operation unverified."
+}

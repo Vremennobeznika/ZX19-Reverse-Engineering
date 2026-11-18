@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ZX19 — предпросмотр интерфейса</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#121212;color:#fff;font:16px/1.5 system-ui,Arial,sans-serif}
+main{max-width:840px;margin:auto;padding:24px}h1{font-size:28px;margin:0 0 8px}p{color:#ccc;margin:8px 0 20px}
+.layout{display:flex;gap:36px;align-items:flex-start;justify-content:center;flex-wrap:wrap}.device{padding:12px;border:1px solid #777;border-radius:20px;background:#000}
+canvas{display:block;width:258px;height:480px;image-rendering:pixelated;touch-action:none;border-radius:8px;cursor:pointer}
+.controls{max-width:310px;flex:1;min-width:240px}button,textarea{font:inherit;border:1px solid #888;border-radius:8px;background:#1e1e1e;color:white}
+button{min-height:44px;padding:8px 14px;cursor:pointer}button:hover,button:focus-visible{background:#fff;color:#111;outline:2px solid #fff;outline-offset:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}textarea{display:block;width:100%;padding:12px;min-height:100px;margin:8px 0 12px;resize:vertical}
+label{display:block;margin-top:24px}small{color:#aaa;display:block}#status{min-height:24px;margin-top:12px}hr{border:0;border-top:1px solid #555;margin:24px 0}
+@media(max-width:480px){main{padding:16px}h1{font-size:24px}.layout{gap:20px}canvas{width:215px;height:400px}.controls{max-width:100%}}
+</style>
+<main><h1>ZX19</h1><p>Предпросмотр будущего интерфейса. На часы не установлено.</p>
+<div class="layout"><div class="device"><canvas id="screen" width="172" height="320" tabindex="0" aria-label="Экран часов: нажмите или проведите пальцем"></canvas></div>
+<div class="controls"><div class="row"><button id="home">Домой</button><button id="button">Кнопка</button><button id="hold">Удержать</button></div>
+<div class="row"><button id="previous" aria-label="Предыдущий пункт">↑</button><button id="next" aria-label="Следующий пункт">↓</button></div>
+<small>Касание — выбор. Свайп вверх или вниз — переключение. Вправо — домой. Влево с циферблата — сообщения. Удержание кнопки сбрасывает секундомер.</small>
+<hr><label for="message">Проверить сообщение</label><textarea id="message" maxlength="256">Привет! Встреча в 15:30. Не забудь ключи.</textarea>
+<button id="send">Добавить сообщение</button><div id="status" role="status" aria-live="polite">Загрузка…</div>
+<small>Работает без интернета. Это проверка интерфейса на компьютере: экран, Bluetooth и батарея настоящих часов здесь не испытываются.</small></div></div></main>
+<script>
+'use strict';
+const screen=document.getElementById('screen'),ctx=screen.getContext('2d'),status=document.getElementById('status');
+ctx.imageSmoothingEnabled=false;let api=null,pressed=false;
+const now=()=>Math.floor(performance.now())>>>0;
+function clock(){const d=new Date();return[d.getHours()*3600+d.getMinutes()*60+d.getSeconds(),d.getDate(),d.getMonth()+1]}
+function draw(){if(!api)return;const [wall,day,month]=clock();api.ui_tick(now(),wall);api.ui_draw(wall,day,month);if(api.ui_alarm())status.textContent='Таймер завершён';}
+function point(e){const r=screen.getBoundingClientRect();return[Math.max(0,Math.min(171,Math.floor((e.clientX-r.left)*172/r.width))),Math.max(0,Math.min(319,Math.floor((e.clientY-r.top)*320/r.height)))]}
+function touch(e,fingers){if(!api)return;const [x,y]=point(e);api.ui_touch(x,y,fingers,now());draw()}
+screen.addEventListener('pointerdown',e=>{if(!api)return;pressed=true;screen.setPointerCapture(e.pointerId);touch(e,1)});
+screen.addEventListener('pointermove',e=>{if(pressed)touch(e,1)});
+screen.addEventListener('pointerup',e=>{if(pressed){touch(e,0);pressed=false}});
+screen.addEventListener('pointercancel',()=>{pressed=false;if(api)api.ui_cancel()});
+for(const [id,action] of Object.entries({home:()=>api.ui_home(),button:()=>api.ui_button(0,now()),hold:()=>api.ui_button(1,now()),previous:()=>api.ui_next(-1),next:()=>api.ui_next(1)}))
+ document.getElementById(id).onclick=()=>{if(api){action();draw()}};
+document.getElementById('send').onclick=()=>{if(!api)return;let text=document.getElementById('message').value,encoded=new TextEncoder().encode(text);
+ while(encoded.length>512){text=Array.from(text).slice(0,-1).join('');encoded=new TextEncoder().encode(text)}
+ new Uint8Array(api.memory.buffer,api.ui_message_buffer(),encoded.length).set(encoded);
+ status.textContent=api.ui_notice(encoded.length)?'Сообщение добавлено — открой «Уведомления»':'Введите текст сообщения';draw()};
+screen.onkeydown=e=>{if(!api)return;let handled=true;if(e.key==='ArrowUp')api.ui_next(-1);else if(e.key==='ArrowDown')api.ui_next(1);else if(e.key==='Enter')api.ui_button(0,now());else if(e.key==='Escape')api.ui_home();else handled=false;if(handled){e.preventDefault();draw()}};
+(async()=>{try{const bytes=Uint8Array.from(atob('WASM_BASE64_PLACEHOLDER'),x=>x.charCodeAt(0));const module=await WebAssembly.instantiate(bytes,{env:{fill:(x,y,w,h,c)=>{
+ const red=((c>>>11)&31)*255/31,green=((c>>>5)&63)*255/63,blue=(c&31)*255/31;ctx.fillStyle=`rgb(${red},${green},${blue})`;ctx.fillRect(x,y,w,h)}}});
+ api=module.instance.exports;api.ui_init(now());draw();status.textContent='Готово к просмотру';document.body.dataset.previewReady='true';setInterval(draw,200);
+ if(location.hash==='#test'){api.ui_init(0);api.ui_touch(20,80,1,0);api.ui_touch(20,80,0,100);const menu=api.ui_page()===1;
+ api.ui_touch(30,70,1,200);api.ui_touch(30,70,0,300);const timer=api.ui_page()===2;
+ api.ui_touch(30,260,1,400);api.ui_touch(30,260,0,500);api.ui_tick(1500,1);const running=api.ui_timer_ms()===299000;
+ api.ui_init(0);const message=new TextEncoder().encode('Привет');new Uint8Array(api.memory.buffer,api.ui_message_buffer(),message.length).set(message);
+ const received=api.ui_notice(message.length)===1&&api.ui_notice_count()===1;
+ api.ui_touch(100,100,1,0);api.ui_touch(10,100,1,100);api.ui_touch(10,100,0,150);const notices=api.ui_page()===4;
+ document.body.dataset.selfTest=menu&&timer&&running&&received&&notices?'passed':'failed';api.ui_init(now());draw()}
+}catch(error){status.textContent='Не удалось запустить предпросмотр: '+error.message;document.body.dataset.previewReady='false'}})();
+</script></html>
