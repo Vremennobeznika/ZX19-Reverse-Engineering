@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Время · ZX19 Libre</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101010;color:#f5f5f5;font:1.1rem/1.5 system-ui,sans-serif}
+main{max-width:34rem;margin:12vh auto;padding:1.5rem}h1{line-height:1.1}button{background:white;color:black;border:0;border-radius:.45rem;padding:.85rem 1.2rem;font:inherit;cursor:pointer}
+button:disabled{opacity:.65}button:focus-visible{outline:3px solid #80adff;outline-offset:4px}
+</style>
+<main>
+<h1>Время на ZX19 Libre</h1>
+<p>Передайте часам местные дату и время этого устройства. При подключении выберите «ZX19 Libre».</p>
+<button type="button" id="sync">Синхронизировать время</button>
+<p id="result" role="status" aria-live="polite"></p>
+</main>
+<script>
+'use strict';
+const service = '6e40fff0-b5a3-f393-e0a9-e50e24dcca9e';
+const command = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+const button = document.getElementById('sync');
+const statusText = document.getElementById('result');
+function timePacket(date) {
+  const year = date.getFullYear();
+  if (year < 2000 || year > 2099) throw new RangeError('Проверьте год на устройстве.');
+  const packet = new Uint8Array(16);
+  packet[0] = 1;
+  const parts = [year-2000,date.getMonth()+1,date.getDate(),date.getHours(),date.getMinutes(),date.getSeconds()];
+  parts.forEach((n,i) => { packet[1+i] = (Math.floor(n/10)<<4) | (n%10); });
+  // The receiver uses local civil time. Language and timezone metadata are ignored.
+  packet[15] = packet.reduce((sum,n) => sum+n,0) & 255;
+  return packet;
+}
+if (!navigator.bluetooth || !window.isSecureContext) {
+  button.disabled = true;
+  statusText.textContent = 'Для подключения откройте файл в Chrome или Edge с поддержкой Bluetooth.';
+}
+button.onclick = async () => {
+  button.disabled = true;
+  let device;
+  try {
+    device = await navigator.bluetooth.requestDevice({filters:[{name:'ZX19 Libre'}],optionalServices:[service]});
+    statusText.textContent = 'Подключение к часам…';
+    const server = await device.gatt.connect();
+    const channel = await (await server.getPrimaryService(service)).getCharacteristic(command);
+    await channel.writeValueWithResponse(timePacket(new Date()));
+    statusText.textContent = 'Часы подтвердили приём даты и времени.';
+  } catch (error) {
+    statusText.textContent = error.name === 'NotFoundError' ? 'Часы не выбраны или сервис недоступен.' :
+      'Передать время не удалось. '+error.message;
+  } finally {
+    if (device && device.gatt.connected) device.gatt.disconnect();
+    button.disabled = false;
+  }
+};
+</script>
+</html>

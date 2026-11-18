@@ -80,7 +80,7 @@ def stock_bus_trace(hz):
     assert cpu.reg_read(A.UC_ARM_REG_PC) == 0x832478
     return trace
 
-def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True):
+def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True, sync=False):
     cpu = U.Uc(U.UC_ARCH_ARM, U.UC_MODE_THUMB | U.UC_MODE_MCLASS)
     cpu.ctl_set_cpu_model(A.UC_CPU_ARM_CORTEX_M4)
     for base, size in [(0, 0x40000), (0x100000, 0x20000), (0x200000, 0x20000),
@@ -90,6 +90,8 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True):
         section = struct.unpack_from('<10I', elf, offset + stride * i)
         if section[2] & 2 and section[1] != 8 and section[5]:
             cpu.mem_write(section[3], elf[section[4]:section[4]+section[5]])
+            if section[3] == symbols[b'__r19z_data_start']:
+                cpu.mem_write(symbols[b'__r19z_data_load'],elf[section[4]:section[4]+section[5]])
     pads = dict.fromkeys(range(256), 0xa5)
     pads.update({0xc4: 0xa0, 0xc5: 0xff})
     writes, ops = [], []
@@ -180,6 +182,10 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True):
         cpu.mem_write(symbols[b'__r19z_bss_start'], b'\xa5'*(symbols[b'__r19z_bss_end']-symbols[b'__r19z_bss_start']))
         task = []
         calls = []
+        base_ms = 500
+        registered = {}
+        radio_calls = []
+        io_messages = [(0,1,1),(0,2,0)]
         def rom(machine, pc, size, user):
             calls.append(pc)
             arg = machine.reg_read(A.UC_ARM_REG_R0)
@@ -191,15 +197,50 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True):
                 machine.mem_write(0xe000ed08,struct.pack('<I',arg))
                 result = 0
             elif pc == 0x1330c:
-                assert machine.mem_read(machine.reg_read(A.UC_ARM_REG_R1),5)==b'ZX19\0'
+                name = b'ZX19 BLE\0' if task else b'ZX19\0'
+                assert machine.mem_read(machine.reg_read(A.UC_ARM_REG_R1),len(name))==name
                 task.append(machine.reg_read(A.UC_ARM_REG_R2))
                 result = int(create_ok)
             elif pc == 0x130a0:
+                if sync:
+                    machine.emu_stop()
+                    return
                 machine.reg_write(A.UC_ARM_REG_PC,task[0])
                 return
+            elif pc == 0x8036: result = 0
+            elif pc == 0x12cdc:
+                machine.mem_write(arg,struct.pack('<I',machine.reg_read(A.UC_ARM_REG_R2)))
+                result = 1
+            elif pc == 0x12e2c:
+                if not io_messages:
+                    machine.emu_stop()
+                    return
+                msg = machine.reg_read(A.UC_ARM_REG_R1)
+                if arg == 1: machine.mem_write(msg,b'\x02')
+                else: machine.mem_write(msg,struct.pack('<HHI',*io_messages.pop(0)))
+                result = 1
+            elif pc == 0x2c800:
+                regs = [machine.reg_read(r) for r in (A.UC_ARM_REG_R1,A.UC_ARM_REG_R2,A.UC_ARM_REG_R3)]
+                sp = machine.reg_read(A.UC_ARM_REG_SP)
+                stack_args = struct.unpack('<4I',machine.mem_read(sp,16))
+                radio_calls.append(arg)
+                if arg == 0x3001: machine.mem_write(regs[1],b'\x01')
+                elif arg in (0x3005,0x3300): machine.mem_write(stack_args[0],b'\x00')
+                elif arg == 0x3102:
+                    service, table, length = regs
+                    assert length == 3*32 or length == 3*28
+                    uuid_address = struct.unpack('<I',machine.mem_read(table+20,4))[0]
+                    assert bytes(machine.mem_read(uuid_address,16)).hex() == '9ecadc240ee5a9e093f3a3b5f0ff406e'
+                    assert bytes(machine.mem_read(table+2*(length//3)+2,16)).hex() == '9ecadc240ee5a9e093f3a3b50200406e'
+                    registered['write'] = stack_args[1]
+                    machine.mem_write(service,b'\x03')
+                    machine.mem_write(stack_args[3],b'\x01')
+                elif arg == 0x100: machine.mem_write(stack_args[0],b'\x01')
+                elif arg == 0x3302: machine.mem_write(regs[0],b'\x00')
+                result = 0
             elif pc == 0x13046:
                 machine.reg_write(A.UC_ARM_REG_R1,0)
-                result = 500 + 32*calls.count(0x13028)
+                result = (base_ms + 32*calls.count(0x13028)) & 0xffffffff
             elif pc == 0x13028:
                 assert arg == 32
                 if calls.count(pc) == 3:
@@ -210,7 +251,8 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True):
             else: raise AssertionError(hex(pc))
             machine.reg_write(A.UC_ARM_REG_R0,result)
             machine.reg_write(A.UC_ARM_REG_PC,machine.reg_read(A.UC_ARM_REG_LR))
-        for address in (0xd8a4,0x112c,0xd8bc,0x4d38,0x1330c,0x130a0,0x13046,0x13028,stack+1024):
+        for address in (0xd8a4,0x112c,0xd8bc,0x4d38,0x1330c,0x130a0,0x13046,0x13028,
+                        0x8036,0x12cdc,0x12e2c,0x2c800,stack+1024):
             cpu.hook_add(U.UC_HOOK_CODE,rom,begin=address,end=address)
         def invoke(addr):
             cpu.reg_write(A.UC_ARM_REG_LR,stop|1)
@@ -220,14 +262,45 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True):
         assert cpu.reg_read(A.UC_ARM_REG_R0)==1
         slots = struct.unpack('<III',cpu.mem_read(0x200cc0,12))
         assert slots == (symbols[b'r19z_pre_main'],stack+1025,symbols[b'r19z_app_main'])
-        for addr in slots: invoke(addr)
+        for addr in slots[:2]: invoke(addr)
+        face_time = (0xffffffff,0,0)
+        if sync:
+            cpu.mem_write(0x202a60,struct.pack('<I',0x2c801))
+            invoke(slots[2])
+            assert len(task) == 2
+            cpu.reg_write(A.UC_ARM_REG_SP,0x21fff0)
+            invoke(task[1])
+            assert radio_calls.count(0x3302) == 2
+            def deliver(fields, length=16, corrupt=False):
+                packet = bytearray.fromhex(fields) + bytearray(9)
+                packet[-1] = (sum(packet) + int(corrupt)) & 255
+                cpu.mem_write(0x202800,bytes(packet))
+                cpu.reg_write(A.UC_ARM_REG_SP,0x21ffe0)
+                cpu.mem_write(0x21ffe0,struct.pack('<III',length,0x202800,0x202840))
+                for r,v in [(A.UC_ARM_REG_R0,0),(A.UC_ARM_REG_R1,3),(A.UC_ARM_REG_R2,2),(A.UC_ARM_REG_R3,0)]:
+                    cpu.reg_write(r,v)
+                invoke(registered['write'])
+                return cpu.reg_read(A.UC_ARM_REG_R0) == 0
+            base_ms = 0xfffffff0
+            assert deliver('01 24 02 28 23 59 59')
+            for fields in ('01 23 02 29 01 02 03','01 24 04 31 01 02 03',
+                           '01 24 01 31 1a 02 03','01 24 01 31 24 02 03'):
+                assert not deliver(fields)
+            assert not deliver('01 24 02 28 23 59 59',corrupt=True)
+            assert not deliver('01 24 02 28 23 59 59',length=15)
+            base_ms = (base_ms + 2000) & 0xffffffff
+            face_time = (1,29,2)
+        if sync:
+            cpu.reg_write(A.UC_ARM_REG_SP,0x21fff0)
+            invoke(task[0])
+        else: invoke(slots[2])
         if not create_ok:
             assert 0x130a0 not in calls and not ops
             return
-        assert calls[-8:] == [0x1330c,0x130a0]+[0x13046,0x13028]*3
+        assert calls[-6:] == [0x13046,0x13028]*3
         assert stops == 3
         assert ops == ([('delay_candidate_ms', n) for n in (50,5,20,120)] + expected
-                       + frame_operations(0xffffffff,0,0) + frame_operations(0xffffffff,0,0,1))
+                       + frame_operations(*face_time) + frame_operations(*face_time,1))
         return
     cpu.emu_start(symbols[b'r19z_display_start'] | 1, stop, count=12000000)
     assert cpu.reg_read(A.UC_ARM_REG_PC) == stop
@@ -267,4 +340,5 @@ for hz in (8000000,90000000,100000000,48000000):
     run(1,hz=hz)
 run(0,boot=True)
 run(0,boot=True,create_ok=False)
-print(f'14 cases passed, including linked ROM entry to first frame and task creation failure; {len(frame)} timed-face transfers')
+run(0,boot=True,sync=True)
+print(f'15 cases passed including QC time handler, leap day and tick wrap; {len(frame)} timed-face transfers')

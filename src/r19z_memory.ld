@@ -6,6 +6,14 @@ MEMORY {
     APP_STATIC (rw) : ORIGIN = 0x208500, LENGTH = 0x8a30
 }
 ENTRY(r19z_system_init)
+/* RTL8762D ROM.lib symbols referenced by the GAP library and OS headers. */
+PROVIDE(SystemCall_Stack = 0x202a60);
+PROVIDE(os_msg_queue_create_intern = 0x12cdd);
+PROVIDE(os_msg_recv_intern = 0x12e2d);
+PROVIDE(os_msg_queue_delete_intern = 0x12d39);
+PROVIDE(__aeabi_memcpy = 0x3a293);
+PROVIDE(__aeabi_memclr4 = 0x3a3d5);
+PROVIDE(log_buffer = 0x8037);
 SECTIONS {
     .text : {
         KEEP(*(.r19z.entry))
