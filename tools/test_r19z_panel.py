@@ -33,10 +33,11 @@ expected = [(op['kind'], op['value']) for op in stock['operations']]
 sys.path.insert(0, str(root / 'tests'))
 from test_renderer import Canvas, FILL, State
 
-def frame_operations(seconds=45240, day=17, month=11):
+def frame_operations(seconds=45240, day=17, month=11, page=0):
     lib = C.CDLL(str(build / 'watch_core.dll'))
     state = State()
     lib.watch_init(C.byref(state), 500)
+    lib.watch_open(C.byref(state), page)
     ops = []
     @FILL
     def rectangle(ctx, x, y, w, h, color):
@@ -145,6 +146,31 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True):
                        (A.UC_ARM_REG_SP, 0x21fff0), (A.UC_ARM_REG_LR, stop | 1)]:
         cpu.reg_write(reg, value)
     if boot:
+        registers = {}
+        packets = iter([(0xa7,[0xb4]),(1,[0,1,0,40,0,80]),(1,[0,0,0,40,0,80])])
+        response, fifo = [], []
+        stops = 0
+        def i2c_write(machine, offset, size, value, user):
+            nonlocal stops
+            reg = offset-0x400
+            if reg != 0x10:
+                registers[reg] = value
+            elif not value & 0x100:
+                index, data = next(packets)
+                assert value == index and registers[4] == 0x15 and registers[0] == 0x65
+                response.extend(data)
+            else:
+                fifo.append(response.pop(0))
+                if value & 0x200:
+                    assert not response
+                    stops += 1
+        def i2c_read(machine, offset, size, user):
+            reg = offset-0x400
+            if reg == 0x70: return 2 | (8 if fifo else 0)
+            if reg == 0x10: return fifo.pop(0)
+            if reg == 0x34: return 0x200 if not response and not fifo and stops else 0
+            return registers.get(reg,0)
+        cpu.mmio_map(0x40015000,4096,i2c_read,None,i2c_write,None)
         # ROM model drives the slots installed by the linked entry point.
         bank, stack = 0x802000, 0x810000
         cpu.mem_write(bank+0x1e0,struct.pack('<II',stack,0x10000))
@@ -173,11 +199,13 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True):
                 return
             elif pc == 0x13046:
                 machine.reg_write(A.UC_ARM_REG_R1,0)
-                result = 500
+                result = 500 + 32*calls.count(0x13028)
             elif pc == 0x13028:
-                assert arg == 60000
-                machine.emu_stop()
-                return
+                assert arg == 32
+                if calls.count(pc) == 3:
+                    machine.emu_stop()
+                    return
+                result = 0
             elif pc == stack+1024: result = 0
             else: raise AssertionError(hex(pc))
             machine.reg_write(A.UC_ARM_REG_R0,result)
@@ -196,8 +224,10 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True):
         if not create_ok:
             assert 0x130a0 not in calls and not ops
             return
-        assert calls[-4:] == [0x1330c,0x130a0,0x13046,0x13028]
-        assert ops == [('delay_candidate_ms', n) for n in (50,5,20,120)] + expected + frame_operations(0xffffffff,0,0)
+        assert calls[-8:] == [0x1330c,0x130a0]+[0x13046,0x13028]*3
+        assert stops == 3
+        assert ops == ([('delay_candidate_ms', n) for n in (50,5,20,120)] + expected
+                       + frame_operations(0xffffffff,0,0) + frame_operations(0xffffffff,0,0,1))
         return
     cpu.emu_start(symbols[b'r19z_display_start'] | 1, stop, count=12000000)
     assert cpu.reg_read(A.UC_ARM_REG_PC) == stop

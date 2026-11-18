@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stddef.h>
 typedef struct { uint32_t poll_budget; uint8_t fault; } r19z_i2c_bus;
+void r19z_touch_setup(void);
 /* For watch_touch_bus.read. I2C1 must already be clocked, pinned, exclusively
  * owned, configured as master with restart enabled, and targeted at 0x15.
  * Failure latches fault. Reinitialize hardware before clearing it.

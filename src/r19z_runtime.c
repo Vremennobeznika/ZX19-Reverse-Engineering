@@ -1,6 +1,8 @@
 /* R19Z 1.00.18 ROM ABI. No flash or radio commands in the display task. */
 #include <stdbool.h>
 #include "r19z_display_app.h"
+#include "r19z_i2c.h"
+#include "watch_touch.h"
 
 static r19z_display_app display;
 static void *task_handle;
@@ -13,9 +15,29 @@ static void display_task(void *argument) {
     bool (*delete_task)(void *) = (bool (*)(void *))(uintptr_t)0x13353;
     r19z_clock_sample clock = {(uint32_t)uptime(), UINT32_MAX, 0, 0};
     int ready = r19z_display_start(&display, &clock);
+    r19z_i2c_bus i2c = {4096, 0};
+    watch_touch_bus touch = {&i2c, r19z_touch_i2c_read, 0};
+    watch_touch_session gesture;
+    watch_touch_cancel(&gesture);
+    if (ready) {
+        r19z_touch_setup();
+        watch_touch_probe(&touch);
+    }
     while (ready) {
-        sleep_ms(60000);
+        uint32_t wait = watch_deadline_ms(&display.watch, 1);
+        if (touch.chip_id && wait > 32) wait = 32;
+        if (wait > 60000) wait = 60000;
+        sleep_ms(wait);
         clock.monotonic_ms = (uint32_t)uptime();
+        if (touch.chip_id) {
+            watch_touch_sample sample;
+            if (watch_touch_read(&touch, &sample))
+                watch_touch_apply(&display.watch, &gesture, &sample, clock.monotonic_ms);
+            else {
+                watch_touch_cancel(&gesture);
+                if (i2c.fault) touch.chip_id = 0;
+            }
+        }
         ready = r19z_display_update(&display, &clock);
     }
     delete_task(task_handle);

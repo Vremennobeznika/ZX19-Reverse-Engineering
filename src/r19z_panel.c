@@ -1,4 +1,5 @@
 #include "r19z_panel.h"
+#include "r19z_pins.h"
 
 #define DISPLAY_CONTROL (*(volatile uint32_t *)0x40024814u)
 #define DISPLAY_BYTE (*(volatile uint32_t *)0x40024838u)
@@ -31,7 +32,7 @@ static int data(void *context, const uint8_t *bytes, size_t length) {
     return 1;
 }
 
-static void configure_pad(unsigned index, unsigned low_bits, unsigned flags) {
+void r19z_configure_pad(unsigned index, unsigned low_bits, unsigned flags) {
     uint8_t (*read_pad)(unsigned) = (uint8_t (*)(unsigned))(uintptr_t)0x2d5b1;
     void (*write_pad)(unsigned, unsigned) = (void (*)(unsigned, unsigned))(uintptr_t)0x2d5f3;
     write_pad(index, (read_pad(index) & 0xf0u) | low_bits);
@@ -40,7 +41,7 @@ static void configure_pad(unsigned index, unsigned low_bits, unsigned flags) {
 
 static int reset_mode(void *context, unsigned mode) {
     (void)context;
-    configure_pad(0xc4, mode ? 0x0eu : 0x07u, 1);
+    r19z_configure_pad(0xc4, mode ? 0x0eu : 0x07u, 1);
     return 1;
 }
 
@@ -67,7 +68,7 @@ static int platform_delay(void *context, unsigned ms) {
 
 #define REG32(address) (*(volatile uint32_t *)(uintptr_t)(address))
 
-static void select_pin(unsigned pin, unsigned function) {
+void r19z_select_pin(unsigned pin, unsigned function) {
     unsigned shift = (pin & 3u) * 8u;
     volatile uint32_t *reg = &REG32(0x40000280u + (pin / 4u) * 4u);
     *reg = (*reg & ~(0xffu << shift)) | (function << shift);
@@ -96,18 +97,18 @@ static void prepare_display_bus(void) {
     DISPLAY_CONTROL = 0x40000100u;
     REG32(0x40024810) = 0x42;
     for (unsigned i = 0; i < sizeof(pins)/sizeof(pins[0]); ++i)
-        configure_pad(pins[i][1], 2, 3);
+        r19z_configure_pad(pins[i][1], 2, 3);
     for (unsigned i = 0; i < sizeof(pins)/sizeof(pins[0]); ++i)
-        select_pin(pins[i][0], 0);
-    configure_pad(0xce, 2, 3);
-    select_pin(23, 0x11);
+        r19z_select_pin(pins[i][0], 0);
+    r19z_configure_pad(0xce, 2, 3);
+    r19z_select_pin(23, 0x11);
 }
 
 int r19z_panel_start_platform(watch_lcd *lcd) {
     if (!lcd || lcd->fault || !delay_entry()) return 0;
     prepare_display_bus();
     /* Board enable H_0 and settling delay at 0x832598..0x8325b6. */
-    configure_pad(0xd0, 2, 1);
+    r19z_configure_pad(0xd0, 2, 1);
     if (!platform_delay(lcd->context, 50)) { lcd->fault = 1; return 0; }
     return r19z_panel_start(lcd, platform_delay);
 }

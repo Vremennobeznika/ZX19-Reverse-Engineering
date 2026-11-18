@@ -12,7 +12,8 @@ def build_runtime():
     BUILD.mkdir(exist_ok=True)
     zig = Path(ziglang.__file__).parent / 'zig.exe'
     modules = ('r19z_startup', 'r19z_runtime', 'r19z_display_app', 'r19z_panel',
-               'watch_lcd', 'watch_core', 'watch_render')
+               'watch_lcd', 'watch_core', 'watch_render', 'watch_input', 'watch_touch',
+               'r19z_i2c', 'r19z_touch_setup')
     subprocess.run([str(zig), 'cc', '-target', 'thumb-freestanding-eabi', '-mcpu=cortex_m4',
                     '-mfloat-abi=soft', '-Os', '-g', '-std=c11', '-Wall', '-Wextra',
                     '-Werror', '-ffreestanding', '-fno-builtin', '-fno-stack-protector',
