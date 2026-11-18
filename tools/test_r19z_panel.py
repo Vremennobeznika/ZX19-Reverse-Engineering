@@ -7,6 +7,7 @@ import ctypes as C
 import hashlib
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_r19z_runtime import build_runtime
+from package_r19z import BASE, package
 import unicorn as U
 from unicorn import arm_const as A
 
@@ -14,6 +15,10 @@ root = Path(__file__).resolve().parents[1]
 build = root / 'build'
 build.mkdir(exist_ok=True)
 elf = build_runtime().read_bytes()
+ota = package(elf)
+if len(sys.argv) == 2:
+    assert Path(sys.argv[1]).read_bytes() == ota, 'Package differs from current build'
+    ota = Path(sys.argv[1]).read_bytes()
 entry = struct.unpack_from('<I', elf, 24)[0]
 offset = struct.unpack_from('<I', elf, 32)[0]
 stride, count = struct.unpack_from('<HH', elf, 46)
@@ -86,8 +91,9 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True, s
     for base, size in [(0, 0x40000), (0x100000, 0x20000), (0x200000, 0x20000),
                        (0x800000,0x100000),(0x4800000,0x100000),(0xe000e000,4096)]:
         cpu.mem_map(base, size)
-    for i in range(count):
-        section = struct.unpack_from('<10I', elf, offset + stride * i)
+    if boot:
+        cpu.mem_write(BASE, ota[80:])
+    for section in ([] if boot else sections):
         if section[2] & 2 and section[1] != 8 and section[5]:
             cpu.mem_write(section[3], elf[section[4]:section[4]+section[5]])
             if section[3] == symbols[b'__r19z_data_start']:
@@ -258,7 +264,7 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True, s
             cpu.reg_write(A.UC_ARM_REG_LR,stop|1)
             cpu.emu_start(addr|1,stop,count=12000000)
         assert entry & ~1 == 0x82c400
-        invoke(entry)
+        invoke(struct.unpack_from('<I', ota, 80 + 28)[0] | 1)
         assert cpu.reg_read(A.UC_ARM_REG_R0)==1
         slots = struct.unpack('<III',cpu.mem_read(0x200cc0,12))
         assert slots == (symbols[b'r19z_pre_main'],stack+1025,symbols[b'r19z_app_main'])
