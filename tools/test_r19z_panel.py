@@ -14,7 +14,7 @@ image = build / 'r19z-panel-test.elf'
 zig = root / 'tools/python/Lib/site-packages/ziglang/zig.exe'
 subprocess.run([str(zig), 'cc', '-target', 'thumb-freestanding-eabi', '-mcpu=cortex_m4',
                 '-Os', '-Wall', '-Wextra', '-Werror', '-ffreestanding', '-nostdlib',
-                '-Wl,-T,' + str(root / 'tests/emulator.ld'), '-Wl,-e,r19z_panel_start',
+                '-Wl,-T,' + str(root / 'tests/emulator.ld'), '-Wl,-e,r19z_panel_start_platform',
                 str(root / 'src/r19z_panel.c'), str(root / 'src/watch_lcd.c'),
                 '-o', str(image)], check=True,
                env=dict(os.environ, ZIG_GLOBAL_CACHE_DIR=str(build / 'zig-cache')))
@@ -25,7 +25,7 @@ stride, count = struct.unpack_from('<HH', elf, 46)
 stock = json.loads((root / 'research/lcd-init-candidate.json').read_text())
 expected = [(op['kind'], op['value']) for op in stock['operations']]
 
-def run(stall_at):
+def run(stall_at, delay_slot=0x2d801):
     cpu = U.Uc(U.UC_ARCH_ARM, U.UC_MODE_THUMB | U.UC_MODE_MCLASS)
     cpu.ctl_set_cpu_model(A.UC_CPU_ARM_CORTEX_M4)
     for base, size in [(0x2d000, 4096), (0x100000, 0x20000), (0x200000, 0x20000)]:
@@ -69,17 +69,21 @@ def run(stall_at):
             pads[arg] = machine.reg_read(A.UC_ARM_REG_R1)
             writes.append((arg, pads[arg]))
         else:
-            assert arg == 0 and address == 0x2d800
-            ops.append(('delay_candidate_ms', machine.reg_read(A.UC_ARM_REG_R1)))
-            machine.reg_write(A.UC_ARM_REG_R0, 1)
+            assert address == 0x2d800
+            ops.append(('delay_candidate_ms', arg))
         machine.reg_write(A.UC_ARM_REG_PC, machine.reg_read(A.UC_ARM_REG_LR))
     cpu.hook_add(U.UC_HOOK_CODE, callback, begin=0x2d000, end=0x2dfff)
     stop, lcd = 0x11fff0, 0x201000
+    cpu.mem_write(0x2004f4, struct.pack('<I', delay_slot))
     for reg, value in [(A.UC_ARM_REG_R0, lcd), (A.UC_ARM_REG_R1, 0x2d801),
                        (A.UC_ARM_REG_SP, 0x21fff0), (A.UC_ARM_REG_LR, stop | 1)]:
         cpu.reg_write(reg, value)
     cpu.emu_start(entry | 1, stop, count=100000)
     assert cpu.reg_read(A.UC_ARM_REG_PC) == stop
+    if delay_slot != 0x2d801:
+        assert cpu.reg_read(A.UC_ARM_REG_R0) == 0
+        assert not writes and not ops and transfers == 0
+        return
     assert cpu.reg_read(A.UC_ARM_REG_R0) == int(not stall_at)
     assert cpu.mem_read(lcd+12, 1)[0] == int(bool(stall_at))
     assert writes == [(0xc4, v) if i % 2 == 0 else (0xc5, v)
@@ -93,4 +97,6 @@ def run(stall_at):
 
 for stall in (0, 1, 3):
     run(stall)
-print('3 panel adapter cases passed: full startup, stalled command, stalled data')
+for invalid in (0, 1, 0xffffffff, 0x2d800):
+    run(0, invalid)
+print('7 panel adapter cases passed: startup, bus timeouts and invalid delay slots')

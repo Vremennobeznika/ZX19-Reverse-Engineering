@@ -49,3 +49,22 @@ int r19z_panel_start(watch_lcd *lcd, watch_lcd_delay_fn delay) {
     lcd->data = data;
     return watch_lcd_start_r19z_first(lcd, reset_mode, delay);
 }
+
+/* The vendor runtime publishes platform_delay_ms in this RAM slot. */
+static uintptr_t delay_entry(void) {
+    uintptr_t entry = *(volatile uint32_t *)0x2004f4u;
+    return (entry & 1u) && entry != UINT32_MAX && entry != 1u ? entry : 0;
+}
+
+static int platform_delay(void *context, unsigned ms) {
+    (void)context;
+    uintptr_t entry = delay_entry();
+    if (!entry) return 0;
+    ((void (*)(unsigned))entry)(ms);
+    return 1;
+}
+
+int r19z_panel_start_platform(watch_lcd *lcd) {
+    if (!delay_entry()) return 0;
+    return r19z_panel_start(lcd, platform_delay);
+}
