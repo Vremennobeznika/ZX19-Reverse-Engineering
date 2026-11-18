@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import struct
 import subprocess
+import sys
+import ctypes as C
 import unicorn as U
 from unicorn import arm_const as A
 
@@ -13,17 +15,52 @@ build.mkdir(exist_ok=True)
 image = build / 'r19z-panel-test.elf'
 zig = root / 'tools/python/Lib/site-packages/ziglang/zig.exe'
 subprocess.run([str(zig), 'cc', '-target', 'thumb-freestanding-eabi', '-mcpu=cortex_m4',
-                '-Os', '-Wall', '-Wextra', '-Werror', '-ffreestanding', '-nostdlib',
-                '-Wl,-T,' + str(root / 'tests/emulator.ld'), '-Wl,-e,r19z_panel_start_platform',
+                '-Os', '-g', '-Wall', '-Wextra', '-Werror', '-ffreestanding', '-nostdlib',
+                '-Wl,-u,r19z_display_update',
+                '-Wl,-T,' + str(root / 'tests/emulator.ld'), '-Wl,-e,r19z_display_start',
                 str(root / 'src/r19z_panel.c'), str(root / 'src/watch_lcd.c'),
+                str(root / 'src/r19z_display_app.c'), str(root / 'src/watch_core.c'),
+                str(root / 'src/watch_render.c'),
                 '-o', str(image)], check=True,
                env=dict(os.environ, ZIG_GLOBAL_CACHE_DIR=str(build / 'zig-cache')))
 elf = image.read_bytes()
 entry = struct.unpack_from('<I', elf, 24)[0]
 offset = struct.unpack_from('<I', elf, 32)[0]
 stride, count = struct.unpack_from('<HH', elf, 46)
+sections = [struct.unpack_from('<10I', elf, offset + stride*i) for i in range(count)]
+symbols = {}
+for section in sections:
+    if section[1] == 2:
+        strings = sections[section[6]]
+        names = elf[strings[4]:strings[4]+strings[5]]
+        for pos in range(section[4], section[4]+section[5], section[9]):
+            name, value = struct.unpack_from('<II', elf, pos)
+            symbols[names[name:].split(b'\0', 1)[0]] = value
 stock = json.loads((root / 'research/lcd-init-candidate.json').read_text())
 expected = [(op['kind'], op['value']) for op in stock['operations']]
+
+# Independent host renderer output expanded into LCD windows and pixel bytes.
+sys.path.insert(0, str(root / 'tests'))
+from test_renderer import Canvas, FILL, State
+
+def frame_operations():
+    lib = C.CDLL(str(build / 'watch_core.dll'))
+    state = State()
+    lib.watch_init(C.byref(state), 500)
+    ops = []
+    @FILL
+    def rectangle(ctx, x, y, w, h, color):
+        for cmd, first, last in [(0x2a, x+34, x+w+33), (0x2b, y, y+h-1)]:
+            ops.append(('command', cmd))
+            ops.extend(('data', b) for b in struct.pack('>HH', first, last))
+        ops.append(('command', 0x2c))
+        ops.extend([('data', color >> 8), ('data', color & 255)] * (w*h))
+    canvas = Canvas(172, 320, rectangle, None)
+    lib.watch_render(C.byref(state), C.byref(canvas), 2, 45240, 17, 11)
+    assert len(ops) > 172*320*2
+    return ops
+
+frame = frame_operations()
 
 def run(stall_at, delay_slot=0x2d801):
     cpu = U.Uc(U.UC_ARCH_ARM, U.UC_MODE_THUMB | U.UC_MODE_MCLASS)
@@ -75,10 +112,11 @@ def run(stall_at, delay_slot=0x2d801):
     cpu.hook_add(U.UC_HOOK_CODE, callback, begin=0x2d000, end=0x2dfff)
     stop, lcd = 0x11fff0, 0x201000
     cpu.mem_write(0x2004f4, struct.pack('<I', delay_slot))
-    for reg, value in [(A.UC_ARM_REG_R0, lcd), (A.UC_ARM_REG_R1, 0x2d801),
+    cpu.mem_write(0x202000, struct.pack('<IIBB', 500, 45240, 17, 11))
+    for reg, value in [(A.UC_ARM_REG_R0, lcd), (A.UC_ARM_REG_R1, 0x202000),
                        (A.UC_ARM_REG_SP, 0x21fff0), (A.UC_ARM_REG_LR, stop | 1)]:
         cpu.reg_write(reg, value)
-    cpu.emu_start(entry | 1, stop, count=100000)
+    cpu.emu_start(entry | 1, stop, count=12000000)
     assert cpu.reg_read(A.UC_ARM_REG_PC) == stop
     if delay_slot != 0x2d801:
         assert cpu.reg_read(A.UC_ARM_REG_R0) == 0
@@ -88,15 +126,28 @@ def run(stall_at, delay_slot=0x2d801):
     assert cpu.mem_read(lcd+12, 1)[0] == int(bool(stall_at))
     assert writes == [(0xc4, v) if i % 2 == 0 else (0xc5, v)
                       for i, v in enumerate([0xa7, 0xfd, 0xae, 0xfd, 0xa7, 0xfd])]
-    complete = [('delay_candidate_ms', n) for n in (5, 20, 120)] + expected
+    complete = [('delay_candidate_ms', n) for n in (5, 20, 120)] + expected + frame
     if stall_at:
         assert transfers == stall_at and polls == stall_at - 1 + 4096
         assert ops == complete[:len(ops)]
     else:
         assert ops == complete
+        for day in (17, 18):
+            ops.clear()
+            cpu.mem_write(0x202000, struct.pack('<IIBB', 600, 45240, day, 11))
+            cpu.reg_write(A.UC_ARM_REG_R0, lcd)
+            cpu.reg_write(A.UC_ARM_REG_R1, 0x202000)
+            cpu.reg_write(A.UC_ARM_REG_LR, stop | 1)
+            cpu.emu_start(symbols[b'r19z_display_update'] | 1, stop, count=12000000)
+            assert cpu.reg_read(A.UC_ARM_REG_PC) == stop
+            assert cpu.reg_read(A.UC_ARM_REG_R0) == 1
+            if day == 17:
+                assert not ops
+            else:
+                assert 0 < len(ops) < len(frame)
 
-for stall in (0, 1, 3):
+for stall in (0, 1, 3, 500):
     run(stall)
 for invalid in (0, 1, 0xffffffff, 0x2d800):
     run(0, invalid)
-print('7 panel adapter cases passed: startup, bus timeouts and invalid delay slots')
+print(f'8 cases passed; {len(frame)} first-frame transfers matched host rendering')
