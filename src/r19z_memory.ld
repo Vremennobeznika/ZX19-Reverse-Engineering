@@ -14,6 +14,19 @@ PROVIDE(os_msg_queue_delete_intern = 0x12d39);
 PROVIDE(__aeabi_memcpy = 0x3a293);
 PROVIDE(__aeabi_memclr4 = 0x3a3d5);
 PROVIDE(log_buffer = 0x8037);
+PROVIDE(SHA256_Init = 0x38b59);
+PROVIDE(SHA256_Update = 0x38b6f);
+PROVIDE(SHA256_Final = 0x38bef);
+PROVIDE(flash_get_bank_addr = 0xce81);
+PROVIDE(flash_get_bank_size = 0xcef9);
+PROVIDE(is_ota_support_bank_switch = 0xd9a3);
+PROVIDE(flash_sw_protect_unlock_by_addr_locked = 0xd6cf);
+PROVIDE(flash_set_block_protect_locked = 0xd6a9);
+PROVIDE(flash_erase_locked = 0xcf67);
+PROVIDE(flash_write_locked = 0xd3a5);
+PROVIDE(flash_read_locked = 0xd415);
+PROVIDE(check_image_chksum = 0xd8b1);
+PROVIDE(WDG_SystemReset = 0x22b1);
 SECTIONS {
     .text : {
         KEEP(*(.r19z.entry))
@@ -31,6 +44,7 @@ SECTIONS {
         *(.bss*) *(COMMON)
         __r19z_bss_end = .;
     } > APP_STATIC
+    .noinit (NOLOAD) : { *(.noinit) } > APP_STATIC
     ASSERT(__r19z_bss_end <= 0x210f30, "Static RAM exceeds stock static span")
     ASSERT(LOADADDR(.data)+SIZEOF(.data) <= 0x880f44, "Code exceeds stock image span")
 }

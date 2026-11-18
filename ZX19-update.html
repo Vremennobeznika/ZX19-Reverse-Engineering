@@ -1,0 +1,62 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Обновление ZX19 Libre</title>
+<style>
+*{box-sizing:border-box}body{margin:3rem auto;max-width:40rem;padding:1rem;background:#17151b;color:#f5eff5;font:17px/1.55 system-ui}label,button,progress,output{display:block;margin:1rem 0}input{display:block;margin-top:.4rem;max-width:100%}button{padding:.7rem 1rem;background:#f3cbe6;color:#1e1720;border:0;border-radius:.4rem;font:inherit}button:disabled{opacity:.55}progress{width:100%}
+</style>
+<h1>Обновление ZX19 Libre</h1>
+<p>Для часов R19Z_V1.0 с уже установленной Libre 0.2. Подключите часы к зарядке. Откройте страницу в Chrome или Edge на компьютере с Bluetooth.</p>
+<label>Образ приложения Libre или заводской R19Z <input type="file" id="file" accept=".bin"></label>
+<label>Ключ установленной сборки <input type="file" id="key" accept=".key"></label>
+<button id="send">Выбрать часы и записать образ</button>
+<progress id="meter" max="1" value="0" aria-label="Запись"></progress><output id="status" aria-live="polite"></output>
+<script>
+const service='6e40fff0-b5a3-f393-e0a9-e50e24dcca9e', update='6e400019-b5a3-f393-e0a9-e50e24dcca9e';
+const [send,file,key,meter,status]=['send','file','key','meter','status'].map(id=>document.getElementById(id));
+function u32(data, index){return new DataView(data.buffer,data.byteOffset,data.byteLength).getUint32(index,true)}
+function message(type, value, bytes=new Uint8Array()){
+  const packet=new Uint8Array(5+bytes.length);
+  packet[0]=type;new DataView(packet.buffer).setUint32(1,value,true);packet.set(bytes,5);return packet;
+}
+async function imageData(file){
+  if(file.size<1104 || file.size>348052)throw Error('Размер файла вне диапазона R19Z');
+  const data=new Uint8Array(await file.arrayBuffer()), image=data.subarray(80);
+  const label=i=>new TextDecoder().decode(data.slice(i,i+32)).split('\0')[0];
+  if(u32(data,0)!==0x81bdc3e5 || label(48)!=='R19Z_V1.0' || !label(16).startsWith('R19Z_') ||
+     u32(data,4)!==image.length || u32(data,8)!==image.length || image.length%4 ||
+     u32(data,12)!==image.reduce((sum,b)=>sum+b,0) || u32(image,0)!==0x09810009 ||
+     u32(image,4)!==0x2793 || u32(image,8)!==image.length-1024 ||
+     u32(image,28)!==0x82c400 || u32(image,40)!==0x82c000)throw Error('Неверный контейнер приложения R19Z');
+  const parts=[image.subarray(12,372),image.subarray(404,752),image.subarray(1008)];
+  const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',await new Blob(parts).arrayBuffer()));
+  if(!digest.every((v,i)=>v===image[372+i]))throw Error('Контрольная сумма Realtek не совпадает');
+  return image;
+}
+send.onclick=async()=>{
+  let device;
+  send.disabled=true;meter.value=0;
+  try{
+    if(!file.files[0] || !key.files[0])throw Error('Выберите образ и ключ владельца');
+    if(!navigator.bluetooth)throw Error('Bluetooth недоступен в этом браузере');
+    // Request the device while the button action still has user activation.
+    device=await navigator.bluetooth.requestDevice({filters:[{name:'ZX19 Libre'}],optionalServices:[service]});
+    const bytes=await imageData(file.files[0]);
+    const secret=(await key.files[0].text()).trim();
+    if(!/^[0-9a-f]{32}$/i.test(secret))throw Error('Неверный формат ключа');
+    const server=await device.gatt.connect();
+    const ch=await (await server.getPrimaryService(service)).getCharacteristic(update);
+    const write=p=>ch.writeValueWithResponse(p);
+    await write(Uint8Array.from([1,...secret.match(/../g).map(v=>parseInt(v,16))]));
+    await write(message(2,bytes.length));
+    let shown=-1;
+    for(let offset=0;offset<bytes.length;offset+=15){
+      const part=bytes.subarray(offset,offset+15);
+      await write(message(3,offset,part));
+      const done=offset+part.length, pct=Math.floor(100*done/bytes.length);
+      if(pct!==shown){meter.value=done/bytes.length;status.textContent='Запись '+pct+' %';shown=pct}
+    }
+    await write(Uint8Array.of(4));
+    status.textContent='Часы подтвердили проверку образа. Соединение закрывается для перезапуска.';
+  }catch(e){status.textContent='Обновление не подтверждено. '+e.message}
+  finally{if(device?.gatt.connected)device.gatt.disconnect();send.disabled=false}
+};
+</script></html>

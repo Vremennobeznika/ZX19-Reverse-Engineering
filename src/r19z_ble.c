@@ -7,6 +7,9 @@
 #include <stddef.h>
 
 extern int r19z_receive_time(const uint8_t *,size_t);
+extern void r19z_radio_available(void);
+extern bool r19z_update_packet(const uint8_t *,size_t);
+extern void r19z_update_disconnect(void);
 static void *events, *messages;
 static T_SERVER_ID time_service;
 
@@ -25,6 +28,10 @@ static T_ATTRIB_APPL attributes[] = {
      1,NULL,GATT_PERM_READ},
     {ATTRIB_FLAG_UUID_128BIT | ATTRIB_FLAG_VALUE_APPL,
      {0x9e,0xca,0xdc,0x24,0x0e,0xe5,0xa9,0xe0,0x93,0xf3,0xa3,0xb5,0x02,0x00,0x40,0x6e},
+     0,NULL,GATT_PERM_WRITE_ENCRYPTED_REQ},
+    {ATTRIB_FLAG_VALUE_INCL,{0x03,0x28,GATT_CHAR_PROP_WRITE},1,NULL,GATT_PERM_READ},
+    {ATTRIB_FLAG_UUID_128BIT | ATTRIB_FLAG_VALUE_APPL,
+     {0x9e,0xca,0xdc,0x24,0x0e,0xe5,0xa9,0xe0,0x93,0xf3,0xa3,0xb5,0x19,0x00,0x40,0x6e},
      0,NULL,GATT_PERM_WRITE_ENCRYPTED_REQ}
 };
 
@@ -34,7 +41,9 @@ static T_APP_RESULT write_time(uint8_t conn, T_SERVER_ID service, uint16_t index
     (void)conn;
     (void)type;
     (void)post;
-    if (service != time_service || index != 2) return APP_RESULT_ATTR_NOT_FOUND;
+    if (service != time_service) return APP_RESULT_ATTR_NOT_FOUND;
+    if (index == 4) return r19z_update_packet(value,length) ? APP_RESULT_SUCCESS : APP_RESULT_REJECT;
+    if (index != 2) return APP_RESULT_ATTR_NOT_FOUND;
     if (length != 16) return APP_RESULT_INVALID_VALUE_SIZE;
     return r19z_receive_time(value,length) ? APP_RESULT_SUCCESS : APP_RESULT_REJECT;
 }
@@ -71,11 +80,17 @@ void r19z_ble_task(void *unused) {
             _Static_assert(sizeof(status) <= sizeof(io.u), "Unexpected GAP event ABI");
             __builtin_memcpy(&status,&io.u,sizeof(status));
             if (io.subtype == GAP_MSG_LE_DEV_STATE_CHANGE && !started &&
-                status.gap_dev_state_change.new_state.gap_init_state == GAP_INIT_STATE_STACK_READY)
+                status.gap_dev_state_change.new_state.gap_init_state == GAP_INIT_STATE_STACK_READY) {
                 started = le_adv_start() == GAP_CAUSE_SUCCESS;
+            }
+            if (io.subtype == GAP_MSG_LE_DEV_STATE_CHANGE &&
+                status.gap_dev_state_change.new_state.gap_adv_state == GAP_ADV_STATE_ADVERTISING)
+                r19z_radio_available();
             else if (io.subtype == GAP_MSG_LE_CONN_STATE_CHANGE &&
-                     status.gap_conn_state_change.new_state == GAP_CONN_STATE_DISCONNECTED)
+                     status.gap_conn_state_change.new_state == GAP_CONN_STATE_DISCONNECTED) {
+                r19z_update_disconnect();
                 started = le_adv_start() == GAP_CAUSE_SUCCESS;
+            }
             else if (io.subtype == GAP_MSG_LE_BOND_JUST_WORK)
                 le_bond_just_work_confirm(status.gap_bond_just_work_conf.conn_id,GAP_CFM_CAUSE_ACCEPT);
         }

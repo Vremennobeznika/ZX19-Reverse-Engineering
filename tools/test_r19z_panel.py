@@ -85,7 +85,7 @@ def stock_bus_trace(hz):
     assert cpu.reg_read(A.UC_ARM_REG_PC) == 0x832478
     return trace
 
-def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True, sync=False):
+def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True, sync=False, retry=False):
     cpu = U.Uc(U.UC_ARCH_ARM, U.UC_MODE_THUMB | U.UC_MODE_MCLASS)
     cpu.ctl_set_cpu_model(A.UC_CPU_ARM_CORTEX_M4)
     for base, size in [(0, 0x40000), (0x100000, 0x20000), (0x200000, 0x20000),
@@ -191,7 +191,8 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True, s
         base_ms = 500
         registered = {}
         radio_calls = []
-        io_messages = [(0,1,1),(0,2,0)]
+        io_messages = [(0,1,1),(0,1,9),(0,2,0)]
+        sleep_calls = []
         def rom(machine, pc, size, user):
             calls.append(pc)
             arg = machine.reg_read(A.UC_ARM_REG_R0)
@@ -203,10 +204,10 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True, s
                 machine.mem_write(0xe000ed08,struct.pack('<I',arg))
                 result = 0
             elif pc == 0x1330c:
-                name = b'ZX19 BLE\0' if task else b'ZX19\0'
+                name = b'ZX19 BLE\0' if sync and not task else b'ZX19\0'
                 assert machine.mem_read(machine.reg_read(A.UC_ARM_REG_R1),len(name))==name
                 task.append(machine.reg_read(A.UC_ARM_REG_R2))
-                result = int(create_ok)
+                result = int(create_ok or name==b'ZX19 BLE\0')
             elif pc == 0x130a0:
                 if sync:
                     machine.emu_stop()
@@ -234,10 +235,11 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True, s
                 elif arg in (0x3005,0x3300): machine.mem_write(stack_args[0],b'\x00')
                 elif arg == 0x3102:
                     service, table, length = regs
-                    assert length == 3*32 or length == 3*28
+                    assert length in (5*32,5*28)
                     uuid_address = struct.unpack('<I',machine.mem_read(table+20,4))[0]
                     assert bytes(machine.mem_read(uuid_address,16)).hex() == '9ecadc240ee5a9e093f3a3b5f0ff406e'
-                    assert bytes(machine.mem_read(table+2*(length//3)+2,16)).hex() == '9ecadc240ee5a9e093f3a3b50200406e'
+                    assert bytes(machine.mem_read(table+2*(length//5)+2,16)).hex() == '9ecadc240ee5a9e093f3a3b50200406e'
+                    assert bytes(machine.mem_read(table+4*(length//5)+2,16)).hex() == '9ecadc240ee5a9e093f3a3b51900406e'
                     registered['write'] = stack_args[1]
                     machine.mem_write(service,b'\x03')
                     machine.mem_write(stack_args[3],b'\x01')
@@ -246,10 +248,11 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True, s
                 result = 0
             elif pc == 0x13046:
                 machine.reg_write(A.UC_ARM_REG_R1,0)
-                result = (base_ms + 32*calls.count(0x13028)) & 0xffffffff
+                result = (base_ms + 32*sleep_calls.count(32)) & 0xffffffff
             elif pc == 0x13028:
-                assert arg == 32
-                if calls.count(pc) == 3:
+                assert arg in (32,15000 if retry else 3000)
+                sleep_calls.append(arg)
+                if sleep_calls.count(32) == 3:
                     machine.emu_stop()
                     return
                 result = 0
@@ -275,8 +278,11 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True, s
             invoke(slots[2])
             assert len(task) == 2
             cpu.reg_write(A.UC_ARM_REG_SP,0x21fff0)
-            invoke(task[1])
+            invoke(task[0])
             assert radio_calls.count(0x3302) == 2
+            if not create_ok:
+                assert 0x130a0 in calls and not ops
+                return
             def deliver(fields, length=16, corrupt=False):
                 packet = bytearray.fromhex(fields) + bytearray(9)
                 packet[-1] = (sum(packet) + int(corrupt)) & 255
@@ -298,7 +304,10 @@ def run(stall_at, delay_slot=0x2d801, hz=40000000, boot=False, create_ok=True, s
             face_time = (1,29,2)
         if sync:
             cpu.reg_write(A.UC_ARM_REG_SP,0x21fff0)
-            invoke(task[0])
+            if retry:
+                cpu.mem_write(symbols[b'boots'],struct.pack('<II',2,2^0x9b142f81))
+            invoke(task[1])
+            assert sleep_calls[0] == (15000 if retry else 3000)
         else: invoke(slots[2])
         if not create_ok:
             assert 0x130a0 not in calls and not ops
@@ -347,4 +356,6 @@ for hz in (8000000,90000000,100000000,48000000):
 run(0,boot=True)
 run(0,boot=True,create_ok=False)
 run(0,boot=True,sync=True)
-print(f'15 cases passed including QC time handler, leap day and tick wrap; {len(frame)} timed-face transfers')
+run(0,boot=True,sync=True,create_ok=False)
+run(0,boot=True,sync=True,retry=True)
+print(f'17 cases passed including BLE without UI and retained boot backoff; {len(frame)} timed-face transfers')

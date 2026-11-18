@@ -11,7 +11,7 @@ from inspect_realtek import ROM_UUID, image_digest, inspect
 BASE = 0x82C000
 START = BASE + 1024
 END = 0x880F44
-OUTPUT = ROOT / 'firmware/ZX19-Libre-0.1.0-dev-R19Z_V1.0.bin'
+OUTPUT = ROOT / 'firmware/ZX19-Libre-0.2.0-dev-R19Z_V1.0.bin'
 
 
 def flash_payload(elf):
@@ -52,14 +52,14 @@ def package(elf):
     header = bytearray(1024)
     struct.pack_into('<BBHHHI16s4I', header, 0, 9, 0, 0x981, 0x2793, 0,
                      len(payload), ROM_UUID, START, START, 0, BASE)
-    struct.pack_into('<I4s8s', header, 96, 1 << 4, hashlib.sha256(payload).digest()[:4],
+    struct.pack_into('<I4s8s', header, 96, 2 << 4, hashlib.sha256(payload).digest()[:4],
                      b'ZX19LIBR')
     for offset in (736, 1008):
         header[offset:offset+16] = b'\xff' * 16
     image = header + payload
     image[372:404] = image_digest(image)
     wrapper = struct.pack('<4I32s32s', 0x81BDC3E5, len(image), len(image),
-                          sum(image) & 0xffffffff, b'R19Z_Libre_0.1.0-dev', b'R19Z_V1.0')
+                          sum(image) & 0xffffffff, b'R19Z_Libre_0.2.0-dev', b'R19Z_V1.0')
     blob = wrapper + image
     if not 10240 <= len(blob) <= 389200 or not inspect(blob)['realtek_sha_matches_stored']:
         raise ValueError('Package validation failed')
